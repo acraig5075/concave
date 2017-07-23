@@ -18,7 +18,18 @@
 #endif
 
 
-using Point = std::pair<double, double>;
+struct Point
+{
+	double x = 0.0;
+	double y = 0.0;
+
+	Point() = default;
+	Point(double x, double y)
+		: x(x)
+		, y(y)
+	{}
+};
+
 using PointList = std::vector<Point>;
 using PointValue = std::pair<Point, double>;
 using PointValueList = std::vector<PointValue>;
@@ -163,7 +174,7 @@ auto ReadFile(const std::string &filename) -> PointList
 		{
 		while (fin.good())
 			{
-			fin >> p.first >> p.second >> z;
+			fin >> p.x >> p.y >> z;
 			list.push_back(p);
 			}
 		}
@@ -178,7 +189,7 @@ auto Print(std::ostream &out, const PointList &dataset, bool marker) -> void
 		{
 		for (const auto &p : dataset)
 			{
-			out << std::fixed << std::setprecision(3) << p.first << "," << p.second << "," << marker << "\n";
+			out << std::fixed << std::setprecision(3) << p.x << "," << p.y << "," << marker << "\n";
 			marker = false;
 			}
 		}
@@ -186,7 +197,7 @@ auto Print(std::ostream &out, const PointList &dataset, bool marker) -> void
 		{
 		for (const auto &p : dataset)
 			{
-			out << std::fixed << std::setprecision(3) << p.first << " " << p.second << "\n";
+			out << std::fixed << std::setprecision(3) << p.x << " " << p.y << "\n";
 			}
 		}
 }
@@ -205,7 +216,7 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 
 #if defined USE_FLANN
 	// construct a randomized kd-tree index using 4 kd-trees
-	flann::Matrix<double> matrix(&(pointList.front().first), pointList.size(), 2);
+	flann::Matrix<double> matrix(&(pointList.front().x), pointList.size(), 2);
 	flann::Index<flann::L2<double>> flannIndex(matrix, flann::KDTreeIndexParams(4));
 	flannIndex.buildIndex();
 #endif
@@ -237,7 +248,7 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 			// Put back the first point into the dataset and into the flann index
 			AddPoint(dataset, firstPoint);
 #if defined USE_FLANN
-			flann::Matrix<double> firstPointMatrix(&firstPoint.first, 1, 2);
+			flann::Matrix<double> firstPointMatrix(&firstPoint.x, 1, 2);
 			flannIndex.addPoints(firstPointMatrix);
 #endif
 			}
@@ -263,8 +274,8 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 
 			while (!its && j < hull.size() - lastPoint)
 				{
-				auto line1 = make_pair(hull[step - 1], cPoints[i]);
-				auto line2 = make_pair(hull[step - j - 1], hull[step - j]);
+				auto line1 = std::make_pair(hull[step - 1], cPoints[i]);
+				auto line2 = std::make_pair(hull[step - j - 1], hull[step - j]);
 				its = Intersects(line1, line2);
 				j++;
 				}
@@ -337,7 +348,7 @@ auto GreaterThan(double a, double b) -> bool
 // Compare whether two points have the same x and y
 auto PointsEqual(const Point &a, const Point &b) -> bool
 {
-	return Equal(a.first, b.first) && Equal(a.second, b.second);
+	return Equal(a.x, b.x) && Equal(a.y, b.y);
 }
 
 // Remove duplicates in a list of points
@@ -345,10 +356,10 @@ auto RemoveDuplicates(PointList &list) -> void
 {
 	sort(begin(list), end(list), [](const Point & a, const Point & b)
 		{
-		if (Equal(a.first, b.first))
-			return LessThan(a.second, b.second);
+		if (Equal(a.x, b.x))
+			return LessThan(a.y, b.y);
 		else
-			return LessThan(a.first, b.first);
+			return LessThan(a.x, b.x);
 		});
 
 	auto newEnd = unique(begin(list), end(list), [](const Point & a, const Point & b)
@@ -366,7 +377,7 @@ auto FindMinYPoint(const PointList &list) -> size_t
 
 	auto itr = min_element(begin(list), end(list), [](const Point & a, const Point & b)
 		{
-		return LessThan(a.second, b.second);
+		return LessThan(a.y, b.y);
 		});
 
 	return itr - begin(list);
@@ -410,7 +421,7 @@ auto NearestNeighboursNaive(const PointList &list, const Point &p, size_t k) -> 
 
 	transform(begin(list), end(list), begin(distances), [&p](const Point & e)
 		{
-		return make_pair(e, DistanceSquared(p, e));
+		return std::make_pair(e, DistanceSquared(p, e));
 		});
 
 	sort(begin(distances), end(distances), [](const PointValue & a, const PointValue & b)
@@ -430,7 +441,7 @@ auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point 
 {
 	std::vector<int> vIndices(k);
 	std::vector<double> vDists(k);
-	double test[] = { p.first, p.second };
+	double test[] = { p.x, p.y };
 
 	flann::Matrix<double> query(test, 1, 2);
 	flann::Matrix<int> mIndices(vIndices.data(), 1, static_cast<int>(vIndices.size()));
@@ -444,8 +455,8 @@ auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point 
 	for (size_t i = 0; i < count; ++i)
 		{
 		const double *point = index.getPoint(vIndices[i]);
-		result[i].first.first = point[0];
-		result[i].first.second = point[1];
+		result[i].first.x = point[0];
+		result[i].first.y = point[1];
 		result[i].second = vDists[i];
 		}
 
@@ -479,7 +490,7 @@ auto SortByAngle(PointValueList &list, const Point &from, double prevAngle) -> P
 // Get the angle in radians measured clockwise from +'ve x-axis
 auto Angle(const Point &a, const Point &b) -> double
 {
-	double angle = -atan2(b.second - a.second, b.first - a.first);
+	double angle = -atan2(b.y - a.y, b.x - a.x);
 
 	return NormaliseAngle(angle);
 }
@@ -496,8 +507,8 @@ auto NormaliseAngle(double radians) -> double
 // Squared distance between two points
 auto DistanceSquared(const Point &a, const Point &b) -> double
 {
-	double dx = b.first - a.first;
-	double dy = b.second - a.second;
+	double dx = b.x - a.x;
+	double dy = b.y - a.y;
 	return (dx * dx + dy * dy);
 }
 
@@ -507,8 +518,8 @@ auto PointInPolygon(const Point &p, const PointList &list) -> bool
 	if (list.size() <= 2)
 		return false;
 
-	const double &x = p.first;
-	const double &y = p.second;
+	const double &x = p.x;
+	const double &y = p.y;
 
 	int inout = 0;
 	auto v0 = list.begin();
@@ -516,14 +527,14 @@ auto PointInPolygon(const Point &p, const PointList &list) -> bool
 
 	while (v1 != list.end())
 		{
-		if ((LessThanOrEqual(v0->second, y) && LessThan(y, v1->second)) || (LessThanOrEqual(v1->second, y) && LessThan(y, v0->second)))
+		if ((LessThanOrEqual(v0->y, y) && LessThan(y, v1->y)) || (LessThanOrEqual(v1->y, y) && LessThan(y, v0->y)))
 			{
-			if (!Zero(v1->second - v0->second))
+			if (!Zero(v1->y - v0->y))
 				{
-				double tdbl1 = (y - v0->second) / (v1->second - v0->second);
-				double tdbl2 = v1->first - v0->first;
+				double tdbl1 = (y - v0->y) / (v1->y - v0->y);
+				double tdbl2 = v1->x - v0->x;
 
-				if (LessThan(x, v0->first + (tdbl2 * tdbl1)))
+				if (LessThan(x, v0->x + (tdbl2 * tdbl1)))
 					inout++;
 				}
 			}
@@ -545,14 +556,14 @@ auto Intersects(const LineSegment &a, const LineSegment &b) -> bool
 {
 	// https://www.topcoder.com/community/data-science/data-science-tutorials/geometry-concepts-line-intersection-and-its-applications/
 
-	const double &ax1 = a.first.first;
-	const double &ay1 = a.first.second;
-	const double &ax2 = a.second.first;
-	const double &ay2 = a.second.second;
-	const double &bx1 = b.first.first;
-	const double &by1 = b.first.second;
-	const double &bx2 = b.second.first;
-	const double &by2 = b.second.second;
+	const double &ax1 = a.first.x;
+	const double &ay1 = a.first.y;
+	const double &ax2 = a.second.x;
+	const double &ay2 = a.second.y;
+	const double &bx1 = b.first.x;
+	const double &by1 = b.first.y;
+	const double &bx2 = b.second.x;
+	const double &by2 = b.second.y;
 
 	double a1 = ay2 - ay1;
 	double b1 = ax1 - ax2;
@@ -597,18 +608,18 @@ auto TestAngle() -> void
 	using std::cout;
 	using std::make_pair;
 
-	cout << "Angle to ( 5.0,  0.0) = " << ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(5.0, 0.0))) << "\n";
-	cout << "Angle to ( 4.0,  3.0) = " << ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(4.0, 3.0))) << "\n";
-	cout << "Angle to ( 3.0,  4.0) = " << ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(3.0, 4.0))) << "\n";
-	cout << "Angle to ( 0.0,  5.0) = " << ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(0.0, 5.0))) << "\n";
-	cout << "Angle to (-3.0,  4.0) = " << ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(-3.0, 4.0))) << "\n";
-	cout << "Angle to (-4.0,  3.0) = " << ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(-4.0, 3.0))) << "\n";
-	cout << "Angle to (-5.0,  0.0) = " << ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(-5.0, 0.0))) << "\n";
-	cout << "Angle to (-4.0, -3.0) = " << ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(-4.0, -3.0))) << "\n";
-	cout << "Angle to (-3.0, -4.0) = " << ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(-3.0, -4.0))) << "\n";
-	cout << "Angle to ( 0.0, -5.0) = " << ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(0.0, -5.0))) << "\n";
-	cout << "Angle to ( 3.0, -4.0) = " << ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(3.0, -4.0))) << "\n";
-	cout << "Angle to ( 4.0, -3.0) = " << ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(4.0, -3.0))) << "\n";
+	cout << "Angle to ( 5.0,  0.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  5.0,  0.0 })) << "\n";
+	cout << "Angle to ( 4.0,  3.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  4.0,  3.0 })) << "\n";
+	cout << "Angle to ( 3.0,  4.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  3.0,  4.0 })) << "\n";
+	cout << "Angle to ( 0.0,  5.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  0.0,  5.0 })) << "\n";
+	cout << "Angle to (-3.0,  4.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, { -3.0,  4.0 })) << "\n";
+	cout << "Angle to (-4.0,  3.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, { -4.0,  3.0 })) << "\n";
+	cout << "Angle to (-5.0,  0.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, { -5.0,  0.0 })) << "\n";
+	cout << "Angle to (-4.0, -3.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, { -4.0, -3.0 })) << "\n";
+	cout << "Angle to (-3.0, -4.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, { -3.0, -4.0 })) << "\n";
+	cout << "Angle to ( 0.0, -5.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  0.0, -5.0 })) << "\n";
+	cout << "Angle to ( 3.0, -4.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  3.0, -4.0 })) << "\n";
+	cout << "Angle to ( 4.0, -3.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  4.0, -3.0 })) << "\n";
 }
 
 // Unit test the Intersects() function
@@ -617,22 +628,22 @@ auto TestIntersects() -> void
 	using std::make_pair;
 
 	std::unordered_map<char, Point> values;
-	values['A'] = make_pair(0.0, 0.0);
-	values['B'] = make_pair(-1.5, 3.0);
-	values['C'] = make_pair(2.0, 2.0);
-	values['D'] = make_pair(-2.0, 1.0);
-	values['E'] = make_pair(-2.5, 5.0);
-	values['F'] = make_pair(-1.5, 7.0);
-	values['G'] = make_pair(1.0, 9.0);
-	values['H'] = make_pair(-4.0, 7.0);
-	values['I'] = make_pair(3.0, 10.0);
-	values['J'] = make_pair(2.0, 11.0);
-	values['K'] = make_pair(-1.0, 11.0);
-	values['L'] = make_pair(-3.0, 11.0);
-	values['M'] = make_pair(-5.0, 9.5);
-	values['N'] = make_pair(-6.0, 7.5);
-	values['O'] = make_pair(-6.0, 4.0);
-	values['P'] = make_pair(-5.0, 2.0);
+	values['A'] = {  0.0,  0.0 };
+	values['B'] = { -1.5,  3.0 };
+	values['C'] = {  2.0,  2.0 };
+	values['D'] = { -2.0,  1.0 };
+	values['E'] = { -2.5,  5.0 };
+	values['F'] = { -1.5,  7.0 };
+	values['G'] = {  1.0,  9.0 };
+	values['H'] = { -4.0,  7.0 };
+	values['I'] = {  3.0, 10.0 };
+	values['J'] = {  2.0, 11.0 };
+	values['K'] = { -1.0, 11.0 };
+	values['L'] = { -3.0, 11.0 };
+	values['M'] = { -5.0,  9.5 };
+	values['N'] = { -6.0,  7.5 };
+	values['O'] = { -6.0,  4.0 };
+	values['P'] = { -5.0,  2.0 };
 
 	auto Test = [&values](const char a1, const char a2, const char b1, const char b2, bool expected)
 		{
