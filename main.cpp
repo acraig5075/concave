@@ -52,6 +52,7 @@ auto HasSuffix(const std::string &str, const std::string &suffix) -> bool;
 auto ReadFile(const std::string &filename) -> PointList;
 auto Print(std::ostream &out, const PointList &dataset, bool civilDesigner = false) -> void;
 auto RemoveDuplicates(PointList &list) -> void;
+auto IdentifyPoints(PointList &list) -> void;
 
 // K-nearest neighbour search
 #if defined USE_FLANN
@@ -98,9 +99,10 @@ int main(int argc, char *argv[])
 	PointList points = ReadFile(filename);
 	size_t uncleanCount = points.size();
 
-	// Remove duplicates
+	// Remove duplicates and id the points
 	RemoveDuplicates(points);
 	size_t cleanCount = points.size();
+	IdentifyPoints(points);
 
 	// Starting k-value
 	size_t k = 0;
@@ -373,6 +375,17 @@ auto RemoveDuplicates(PointList &list) -> void
 		});
 
 	list.erase(newEnd, end(list));
+}
+
+// Uniquely id the points for binary searching
+auto IdentifyPoints(PointList &list) -> void
+{
+	std::uint64_t id = 0;
+
+	for (auto itr = begin(list); itr != end(list); ++itr, ++id)
+	{
+		itr->id = id;
+	}
 }
 
 // Find the point int the list of points having the smallest y-value
