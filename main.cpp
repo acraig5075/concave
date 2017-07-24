@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cassert>
 #include <unordered_map>
+#include <cstdint>
 
 #define USE_FLANN
 
@@ -22,6 +23,7 @@ struct Point
 {
 	double x = 0.0;
 	double y = 0.0;
+	std::uint64_t id = 0;
 
 	Point() = default;
 	Point(double x, double y)
@@ -29,6 +31,8 @@ struct Point
 		, y(y)
 	{}
 };
+
+static const size_t stride = 24; // size in bytes of x, y, id
 
 using PointList = std::vector<Point>;
 using PointValue = std::pair<Point, double>;
@@ -216,7 +220,8 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 
 #if defined USE_FLANN
 	// construct a randomized kd-tree index using 4 kd-trees
-	flann::Matrix<double> matrix(&(pointList.front().x), pointList.size(), 2);
+	// 2 columns, but 24 bytes in width (x, y, ignoring id)
+	flann::Matrix<double> matrix(&(pointList.front().x), pointList.size(), 2, stride);
 	flann::Index<flann::L2<double>> flannIndex(matrix, flann::KDTreeIndexParams(4));
 	flannIndex.buildIndex();
 #endif
@@ -248,7 +253,7 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 			// Put back the first point into the dataset and into the flann index
 			AddPoint(dataset, firstPoint);
 #if defined USE_FLANN
-			flann::Matrix<double> firstPointMatrix(&firstPoint.x, 1, 2);
+			flann::Matrix<double> firstPointMatrix(&firstPoint.x, 1, 2, stride);
 			flannIndex.addPoints(firstPointMatrix);
 #endif
 			}
@@ -390,6 +395,8 @@ auto LookupPoint(const PointList &list, const Point &p) -> size_t
 		{
 		return PointsEqual(e, p);
 		});
+
+	assert(itr != end(list));
 
 	return itr - begin(list);
 }
