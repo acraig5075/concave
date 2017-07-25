@@ -10,13 +10,9 @@
 #include <unordered_map>
 #include <cstdint>
 
-#define USE_FLANN
-
-#if defined USE_FLANN
 #pragma warning(push, 0)
 #include <flann\flann.hpp>
 #pragma warning(pop)
-#endif
 
 using std::uint64_t;
 
@@ -56,11 +52,8 @@ auto RemoveDuplicates(PointList &list) -> void;
 auto IdentifyPoints(PointList &list) -> void;
 
 // K-nearest neighbour search
-#if defined USE_FLANN
 auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point &p, size_t k) -> PointValueList;
-#else
 auto NearestNeighboursNaive(const PointList &list, const Point &p, size_t k) -> PointValueList;
-#endif
 
 // Algorithm-specific
 auto ConcaveHull(PointList &dataset, size_t k) -> PointList;
@@ -220,13 +213,11 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 	if (dataset.size() == 3)
 		return dataset;
 
-#if defined USE_FLANN
 	// construct a randomized kd-tree index using 4 kd-trees
 	// 2 columns, but 24 bytes in width (x, y, ignoring id)
 	flann::Matrix<double> matrix(&(pointList.front().x), pointList.size(), 2, stride);
 	flann::Index<flann::L2<double>> flannIndex(matrix, flann::KDTreeIndexParams(4));
 	flannIndex.buildIndex();
-#endif
 
 	size_t kk = std::min(std::max(k, (size_t)3), dataset.size() - 1);
 	std::cout << "\rFinal 'k'        : " << kk;
@@ -239,9 +230,7 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 	// Until the hull is of size > 3 we want to ignore the first point from nearest neighbour searches
 	Point currentPoint = firstPoint;
 	RemovePoint(dataset, firstPoint);
-#if defined USE_FLANN
 	flannIndex.removePoint(firstPoint.id);
-#endif
 
 	double prevAngle = 0.0;
 	int step = 1;
@@ -254,17 +243,11 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 			// Put back the first point into the dataset and into the flann index
 			firstPoint.id = pointList.size();
 			AddPoint(dataset, firstPoint);
-#if defined USE_FLANN
 			flann::Matrix<double> firstPointMatrix(&firstPoint.x, 1, 2, stride);
 			flannIndex.addPoints(firstPointMatrix);
-#endif
 			}
 
-#if defined USE_FLANN
 		PointValueList kNearestNeighbours = NearestNeighboursFlann(flannIndex, currentPoint, kk);
-#else
-		PointValueList kNearestNeighbours = NearestNeighboursNaive(dataset, currentPoint, kk);
-#endif
 		PointList cPoints = SortByAngle(kNearestNeighbours, currentPoint, prevAngle);
 
 		bool its = true;
@@ -301,9 +284,8 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 		prevAngle = Angle(hull[step], hull[step - 1]);
 
 		RemovePoint(dataset, currentPoint);
-#if defined USE_FLANN
+
 		flannIndex.removePoint(currentPoint.id);
-#endif
 
 		step++;
 		}
@@ -441,7 +423,6 @@ auto NearestNeighboursNaive(const PointList &list, const Point &p, size_t k) -> 
 	return distances;
 }
 
-#if defined USE_FLANN
 // Return the k-nearest points in a list of points from the given point p (uses Flann library).
 auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point &p, size_t k) -> PointValueList
 {
@@ -470,7 +451,6 @@ auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point 
 
 	return result;
 }
-#endif
 
 // Returns a list of points sorted in descending order of clockwise angle
 auto SortByAngle(PointValueList &list, const Point &from, double prevAngle) -> PointList
