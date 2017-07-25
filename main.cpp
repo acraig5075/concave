@@ -18,12 +18,13 @@
 #pragma warning(pop)
 #endif
 
+using std::uint64_t;
 
 struct Point
 {
 	double x = 0.0;
 	double y = 0.0;
-	std::uint64_t id = 0;
+	uint64_t id = 0;
 
 	Point() = default;
 	Point(double x, double y)
@@ -64,12 +65,11 @@ auto NearestNeighboursNaive(const PointList &list, const Point &p, size_t k) -> 
 // Algorithm-specific
 auto ConcaveHull(PointList &dataset, size_t k) -> PointList;
 auto SortByAngle(PointValueList &list, const Point &p, double prevAngle) -> PointList;
-auto LookupPoint(const PointList &list, const Point &p) -> size_t;
 auto RemovePoint(PointList &list, const Point &p) -> void;
 auto AddPoint(PointList &list, const Point &p) -> void;
 
 // General maths
-auto FindMinYPoint(const PointList &list) -> size_t;
+auto FindMinYPoint(const PointList &list) -> Point;
 auto PointsEqual(const Point &a, const Point &b) -> bool;
 auto Angle(const Point &a, const Point &b) -> double;
 auto NormaliseAngle(double radians) -> double;
@@ -233,15 +233,14 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 
 	// Make a point list for storing the result hull, and initialise it with the min-y point
 	PointList hull;
-	size_t firstPointId = FindMinYPoint(dataset);
-	Point firstPoint = dataset.at(firstPointId);
+	Point firstPoint = FindMinYPoint(dataset);
 	AddPoint(hull, firstPoint);
 
 	// Until the hull is of size > 3 we want to ignore the first point from nearest neighbour searches
 	Point currentPoint = firstPoint;
 	RemovePoint(dataset, firstPoint);
 #if defined USE_FLANN
-	flannIndex.removePoint(firstPointId);
+	flannIndex.removePoint(firstPoint.id);
 #endif
 
 	double prevAngle = 0.0;
@@ -253,6 +252,7 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 		if (step == 4)
 			{
 			// Put back the first point into the dataset and into the flann index
+			firstPoint.id = pointList.size();
 			AddPoint(dataset, firstPoint);
 #if defined USE_FLANN
 			flann::Matrix<double> firstPointMatrix(&firstPoint.x, 1, 2, stride);
@@ -300,10 +300,9 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 
 		prevAngle = Angle(hull[step], hull[step - 1]);
 
-		size_t currentPointId = LookupPoint(pointList, currentPoint);
 		RemovePoint(dataset, currentPoint);
 #if defined USE_FLANN
-		flannIndex.removePoint(currentPointId);
+		flannIndex.removePoint(currentPoint.id);
 #endif
 
 		step++;
@@ -380,7 +379,7 @@ auto RemoveDuplicates(PointList &list) -> void
 // Uniquely id the points for binary searching
 auto IdentifyPoints(PointList &list) -> void
 {
-	std::uint64_t id = 0;
+	uint64_t id = 0;
 
 	for (auto itr = begin(list); itr != end(list); ++itr, ++id)
 	{
@@ -389,7 +388,7 @@ auto IdentifyPoints(PointList &list) -> void
 }
 
 // Find the point int the list of points having the smallest y-value
-auto FindMinYPoint(const PointList &list) -> size_t
+auto FindMinYPoint(const PointList &list) -> Point
 {
 	assert(!list.empty());
 
@@ -398,35 +397,22 @@ auto FindMinYPoint(const PointList &list) -> size_t
 		return LessThan(a.y, b.y);
 		});
 
-	return itr - begin(list);
+	return *itr;
 }
 
-// Lookup and return index of a point in the list
-auto LookupPoint(const PointList &list, const Point &p) -> size_t
-{
-	auto itr = find_if(begin(list), end(list), [&p](const Point & e)
-		{
-		return PointsEqual(e, p);
-		});
-
-	assert(itr != end(list));
-
-	return itr - begin(list);
-}
-
-// Lookup and remove a point from a list of points
+// Lookup by ID and remove a point from a list of points
 auto RemovePoint(PointList &list, const Point &p) -> void
 {
-	auto itr = find_if(begin(list), end(list), [&p](const Point & e)
+	auto itr = std::lower_bound(begin(list), end(list), p, [](const Point &a, const Point &b)
 		{
-		return PointsEqual(e, p);
+		return a.id < b.id;
 		});
 
-	assert(itr != end(list));
+	assert(itr != end(list) && itr->id == p.id);
 
 	if (itr != end(list))
 		list.erase(itr);
-}
+	}
 
 // Add a point to a list of points
 auto AddPoint(PointList &list, const Point &p) -> void
@@ -474,9 +460,11 @@ auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point 
 
 	for (size_t i = 0; i < count; ++i)
 		{
-		const double *point = index.getPoint(vIndices[i]);
+		int id = vIndices[i];
+		const double *point = index.getPoint(id);
 		result[i].first.x = point[0];
 		result[i].first.y = point[1];
+		result[i].first.id = id;
 		result[i].second = vDists[i];
 		}
 
