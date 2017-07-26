@@ -41,3 +41,5 @@
 Debug/
 Release/
 x64/
+
+*.dat
