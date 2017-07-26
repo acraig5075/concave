@@ -58,7 +58,6 @@ auto NearestNeighboursNaive(const PointList &list, const Point &p, size_t k) -> 
 // Algorithm-specific
 auto ConcaveHull(PointList &dataset, size_t k) -> PointList;
 auto SortByAngle(PointValueList &list, const Point &p, double prevAngle) -> PointList;
-auto RemovePoint(PointList &list, const Point &p) -> void;
 auto AddPoint(PointList &list, const Point &p) -> void;
 
 // General maths
@@ -69,6 +68,8 @@ auto NormaliseAngle(double radians) -> double;
 auto DistanceSquared(const Point &a, const Point &b) -> double;
 auto PointInPolygon(const Point &p, const PointList &list) -> bool;
 auto Intersects(const LineSegment &a, const LineSegment &b) -> bool;
+auto RemovePointsNotInHull(PointList &dataset, const PointList &hull) -> PointList::iterator;
+auto AllPointsInPolygon(PointList::iterator begin, PointList::iterator end, const PointList &hull) -> bool;
 
 // Testing
 auto TestAngle() -> void;
@@ -204,14 +205,10 @@ auto Print(std::ostream &out, const PointList &dataset, bool marker) -> void
 // The main algorithm from the Moreira-Santos paper.
 auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 {
-	size_t origPointCount = pointList.size();
-
-	PointList dataset = pointList;
-
-	if (dataset.size() < 3)
+	if (pointList.size() < 3)
 		return{};
-	if (dataset.size() == 3)
-		return dataset;
+	if (pointList.size() == 3)
+		return pointList;
 
 	// construct a randomized kd-tree index using 4 kd-trees
 	// 2 columns, but 24 bytes in width (x, y, ignoring id)
@@ -219,30 +216,28 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 	flann::Index<flann::L2<double>> flannIndex(matrix, flann::KDTreeIndexParams(4));
 	flannIndex.buildIndex();
 
-	size_t kk = std::min(std::max(k, (size_t)3), dataset.size() - 1);
+	size_t kk = std::min(std::max(k, (size_t)3), pointList.size() - 1);
 	std::cout << "\rFinal 'k'        : " << kk;
 
 	// Make a point list for storing the result hull, and initialise it with the min-y point
 	PointList hull;
-	Point firstPoint = FindMinYPoint(dataset);
+	Point firstPoint = FindMinYPoint(pointList);
 	AddPoint(hull, firstPoint);
 
 	// Until the hull is of size > 3 we want to ignore the first point from nearest neighbour searches
 	Point currentPoint = firstPoint;
-	RemovePoint(dataset, firstPoint);
 	flannIndex.removePoint(firstPoint.id);
 
 	double prevAngle = 0.0;
 	int step = 1;
 
 	// Iterate until we reach the start, or until there's no points left to process
-	while ((!PointsEqual(currentPoint, firstPoint) || step == 1) && !dataset.empty())
+	while ((!PointsEqual(currentPoint, firstPoint) || step == 1) && hull.size() != pointList.size())
 		{
 		if (step == 4)
 			{
 			// Put back the first point into the dataset and into the flann index
 			firstPoint.id = pointList.size();
-			AddPoint(dataset, firstPoint);
 			flann::Matrix<double> firstPointMatrix(&firstPoint.x, 1, 2, stride);
 			flannIndex.addPoints(firstPointMatrix);
 			}
@@ -283,22 +278,19 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 
 		prevAngle = Angle(hull[step], hull[step - 1]);
 
-		RemovePoint(dataset, currentPoint);
+		//RemovePoint(dataset, currentPoint);
 
 		flannIndex.removePoint(currentPoint.id);
 
 		step++;
 		}
 
-	bool allInside = all_of(begin(dataset), end(dataset), [&hull](const Point & p)
-		{
-		return PointInPolygon(p, hull);
-		});
+	PointList dataset = pointList;
+	auto newEnd = RemovePointsNotInHull(dataset, hull);
+	bool allInside = AllPointsInPolygon(begin(dataset), newEnd, hull);
 
 	if (!allInside)
 		return ConcaveHull(pointList, kk + 1);
-
-	assert(origPointCount == pointList.size());
 
 	return hull;
 }
@@ -498,6 +490,35 @@ auto DistanceSquared(const Point &a, const Point &b) -> double
 	double dx = b.x - a.x;
 	double dy = b.y - a.y;
 	return (dx * dx + dy * dy);
+}
+
+// Return the new logical end after removing points from dataset having ids belonging to hull
+auto RemovePointsNotInHull(PointList &dataset, const PointList &hull) -> PointList::iterator
+{
+	std::vector<uint64_t> ids(hull.size());
+
+	transform(begin(hull), end(hull), begin(ids), [](const Point &p)
+	{
+		return p.id;
+	});
+
+	sort(begin(ids), end(ids));
+
+	return remove_if(begin(dataset), end(dataset), [&ids](const Point &p)
+	{
+		return binary_search(begin(ids), end(ids), p.id);
+	});
+}
+
+// Check whether all points in a begin/end range are inside hull.
+auto AllPointsInPolygon(PointList::iterator begin, PointList::iterator end, const PointList &hull) -> bool
+{
+	bool allInside = all_of(begin, end, [&hull](const Point & p)
+	{
+		return PointInPolygon(p, hull);
+	});
+
+	return allInside;
 }
 
 // Point-in-polygon test
