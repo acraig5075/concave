@@ -14,6 +14,14 @@
 #include <flann\flann.hpp>
 #pragma warning(pop)
 
+#define USE_OPENMP // parallel PointInPolygon test
+
+#if defined USE_OPENMP
+#if !defined _OPENMP
+#pragma message("You've chosen to want OpenMP usage but have not made it a compilation option. Compile with /openmp")
+#endif
+#endif
+
 using std::uint64_t;
 
 struct Point
@@ -510,15 +518,55 @@ auto RemovePointsNotInHull(PointList &dataset, const PointList &hull) -> PointLi
 	});
 }
 
+// Uses OpenMP to determine whether a condition exists in the specified range of elements. https://msdn.microsoft.com/en-us/library/ff521445.aspx
+template <class InIt, class Predicate>
+bool omp_parallel_any_of(InIt first, InIt last, const Predicate &pr)
+{
+	typedef typename std::iterator_traits<InIt>::value_type item_type;
+
+	// A flag that indicates that the condition exists.
+	bool found = false;
+
+	#pragma omp parallel for
+	for (int i = 0; i < static_cast<int>(last - first); ++i)
+		{
+		if (!found)
+			{
+			item_type &cur = *(first + i);
+
+			// If the element satisfies the condition, set the flag to
+			// cancel the operation.
+			if (pr(cur))
+				{
+				found = true;
+				}
+			}
+		}
+
+	return found;
+}
+
 // Check whether all points in a begin/end range are inside hull.
 auto AllPointsInPolygon(PointList::iterator begin, PointList::iterator end, const PointList &hull) -> bool
 {
-	bool allInside = all_of(begin, end, [&hull](const Point & p)
-	{
-		return PointInPolygon(p, hull);
-	});
+	auto test = [&hull](const Point & p)
+		{
+		return !PointInPolygon(p, hull);
+		};
 
-	return allInside;
+	bool anyOutside = true;
+
+#if defined USE_OPENMP
+
+	anyOutside = omp_parallel_any_of(begin, end, test); // multi threaded
+
+#else
+
+	anyOutside = std::any_of(begin, end, test); // single threaded
+
+#endif
+
+	return !anyOutside;
 }
 
 // Point-in-polygon test
