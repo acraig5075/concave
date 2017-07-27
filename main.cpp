@@ -52,7 +52,10 @@ auto LessThanOrEqual(double a, double b) -> bool;
 auto GreaterThan(double a, double b) -> bool;
 
 // I/O
-auto Usage(char *argv[]) -> void;
+auto Usage() -> void;
+auto FindArgument(int argc, char** argv, const std::string &name) -> int;
+auto ParseArgument(int argc, char** argv, const std::string &name, std::string &val) -> int;
+auto ParseArgument(int argc, char** argv, const std::string &name, int &val) -> int;
 auto HasSuffix(const std::string &str, const std::string &suffix) -> bool;
 auto ReadFile(const std::string &filename) -> PointList;
 auto Print(std::ostream &out, const PointList &dataset, bool civilDesigner = false) -> void;
@@ -87,17 +90,19 @@ auto TestIntersects() -> void;
 
 int main(int argc, char *argv[])
 {
-	if (argc == 1)
+	std::cout << "Concave hull: A k-nearest neighbours approach.\n";
+
+	// input filename is the only requirement
+	if (FindArgument(argc, argv, "-in") == -1)
 		{
-		Usage(argv);
+		Usage();
 		return EXIT_FAILURE;
 		}
 
-	//TestAngle();
-	//TestIntersects();
+	std::string filename;
+	ParseArgument(argc, argv, "-in", filename);
 
 	// Read input
-	std::string filename(argv[1]);
 	PointList points = ReadFile(filename);
 	size_t uncleanCount = points.size();
 
@@ -107,10 +112,10 @@ int main(int argc, char *argv[])
 	IdentifyPoints(points);
 
 	// Starting k-value
-	size_t k = 0;
-	if (argc > 2)
-		k = atoi(argv[2]);
-	k = std::max(k, (size_t)3);
+	int k = 0;
+	if (FindArgument(argc, argv, "-k") != -1)
+		ParseArgument(argc, argv, "-k", k);
+	k = std::max(k, 3);
 
 	std::cout << "Filename         : " << filename << "\n";
 	std::cout << "Input points     : " << uncleanCount << "\n";
@@ -121,7 +126,7 @@ int main(int argc, char *argv[])
 	auto startTime = std::chrono::high_resolution_clock::now();
 
 	// The main algorithm
-	PointList hull = ConcaveHull(points, k);
+	PointList hull = ConcaveHull(points, (size_t)k);
 
 	auto endTime = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
@@ -131,17 +136,28 @@ int main(int argc, char *argv[])
 	std::cout << "Time             : " << duration << "s\n";
 	std::cout << "\n";
 
-	if (argc > 3)
+	// Optional no further output
+	if (FindArgument(argc, argv, "-no_out") != -1)
+	{
+		if (FindArgument(argc, argv, "-out") != -1)
+			std::cout << "Output to file overridden by switch -no_out.\n";
+		return EXIT_SUCCESS;
+	}
+
+	// Output to file or stdout
+	if (FindArgument(argc, argv, "-out") != -1)
 		{
-		// output to file
-		std::string outfilename(argv[3]);
-		bool mode = HasSuffix(outfilename, ".blk");
-		std::ofstream fout(outfilename.c_str());
+		std::string output;
+		ParseArgument(argc, argv, "-out", output);
+
+		bool mode = HasSuffix(output, ".blk");
+		std::ofstream fout(output.c_str());
 		Print(fout, hull, mode);
+		std::cout << output << " written.\n";
 		}
 	else
 		{
-		// output to console
+		// Nothing specified, so output to console
 		Print(std::cout, hull);
 		}
 
@@ -149,17 +165,47 @@ int main(int argc, char *argv[])
 }
 
 
-
-
 // Print program usage info.
-auto Usage(char *argv[]) -> void
+auto Usage() -> void
 {
-	std::cout << "Usage:\n";
-	std::cout << argv[0] << " <input filename> [starting k-value] [output filename]\n";
+	std::cout << "Usage: concave.exe -in filename [-out filename] [-k starting k-value] [-no_out]\n";
 	std::cout << "\n";
-	std::cout << "Input filename   (required)  : Dataset file containing space-delimited x y pairs, one row per coordinate.\n";
-	std::cout << "Starting k-value (optional)  : File containing space-delimited x y pairs, one row per coordinate. Default = 3.\n";
-	std::cout << "Output filename  (optional)  : Hull file containing comma-delimited x y pairs, one row per coordinate. Default = stdout.\n";
+	std::cout << " -in                    : file of x y z input coordinates, one row per point, z is ignored.\n";
+	std::cout << " -out        (optional) : file for the hull polygon x y coordinates, one row per point. Default=stdout.\n";
+	std::cout << " -k          (optional) : start iteration K value. Default=3.\n";
+	std::cout << " -no_out     (optional) : disable output of the hull polygon coordinates.\n";
+}
+
+// Get command line index of name
+auto FindArgument(int argc, char** argv, const std::string &name) -> int
+{
+	for (int i = 1; i < argc; ++i)
+	{
+		if (std::string(argv[i]) == name)
+			return i;
+	}
+	return -1;
+}
+
+// Get the command line value (string) for name
+auto ParseArgument(int argc, char** argv, const std::string &name, std::string &val) -> int
+{
+	int index = FindArgument(argc, argv, name) + 1;
+	if (index > 0 && index < argc)
+		val = argv[index];
+
+	return index - 1;
+}
+
+// Get the command line value (int) for name
+auto ParseArgument(int argc, char** argv, const std::string &name, int &val) -> int
+{
+	int index = FindArgument(argc, argv, name) + 1;
+
+	if (index > 0 && index < argc)
+		val = atoi(argv[index]);
+
+	return (index - 1);
 }
 
 // Check whether a string ends with a specified suffix.
@@ -219,7 +265,7 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 		return pointList;
 
 	// construct a randomized kd-tree index using 4 kd-trees
-	// 2 columns, but 24 bytes in width (x, y, ignoring id)
+	// 2 columns, but stride = 24 bytes in width (x, y, ignoring id)
 	flann::Matrix<double> matrix(&(pointList.front().x), pointList.size(), 2, stride);
 	flann::Index<flann::L2<double>> flannIndex(matrix, flann::KDTreeIndexParams(4));
 	flannIndex.buildIndex();
@@ -285,8 +331,6 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 		AddPoint(hull, currentPoint);
 
 		prevAngle = Angle(hull[step], hull[step - 1]);
-
-		//RemovePoint(dataset, currentPoint);
 
 		flannIndex.removePoint(currentPoint.id);
 
@@ -534,8 +578,7 @@ bool omp_parallel_any_of(InIt first, InIt last, const Predicate &pr)
 			{
 			item_type &cur = *(first + i);
 
-			// If the element satisfies the condition, set the flag to
-			// cancel the operation.
+			// If the element satisfies the condition, set the flag to cancel the operation.
 			if (pr(cur))
 				{
 				found = true;
