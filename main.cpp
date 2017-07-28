@@ -53,14 +53,16 @@ auto GreaterThan(double a, double b) -> bool;
 
 // I/O
 auto Usage() -> void;
-auto FindArgument(int argc, char** argv, const std::string &name) -> int;
-auto ParseArgument(int argc, char** argv, const std::string &name, std::string &val) -> int;
-auto ParseArgument(int argc, char** argv, const std::string &name, int &val) -> int;
-auto HasSuffix(const std::string &str, const std::string &suffix) -> bool;
+auto FindArgument(int argc, char **argv, const std::string &name) -> int;
+auto ParseArgument(int argc, char **argv, const std::string &name, std::string &val) -> int;
+auto ParseArgument(int argc, char **argv, const std::string &name, int &val) -> int;
+auto HasExtension(const std::string &str, const std::string &suffix) -> bool;
 auto ReadFile(const std::string &filename) -> PointList;
-auto Print(std::ostream &out, const PointList &dataset, bool civilDesigner = false) -> void;
+auto Print(const std::string &filename, const PointList &dataset) -> void;
+auto Print(FILE *out, const PointList &dataset, const char *format = "%.3f  %.3f\n") -> void;
 auto RemoveDuplicates(PointList &list) -> void;
 auto IdentifyPoints(PointList &list) -> void;
+auto Split(const std::string &value, const char *delims)->std::vector<std::string>;
 
 // K-nearest neighbour search
 auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point &p, size_t k) -> PointValueList;
@@ -85,11 +87,14 @@ auto AllPointsInPolygon(PointList::iterator begin, PointList::iterator end, cons
 // Testing
 auto TestAngle() -> void;
 auto TestIntersects() -> void;
+auto TestSplit() -> void;
 
 
 
 int main(int argc, char *argv[])
 {
+	//TestSplit();
+
 	std::cout << "Concave hull: A k-nearest neighbours approach.\n";
 
 	// input filename is the only requirement
@@ -138,11 +143,11 @@ int main(int argc, char *argv[])
 
 	// Optional no further output
 	if (FindArgument(argc, argv, "-no_out") != -1)
-	{
+		{
 		if (FindArgument(argc, argv, "-out") != -1)
 			std::cout << "Output to file overridden by switch -no_out.\n";
 		return EXIT_SUCCESS;
-	}
+		}
 
 	// Output to file or stdout
 	if (FindArgument(argc, argv, "-out") != -1)
@@ -150,15 +155,13 @@ int main(int argc, char *argv[])
 		std::string output;
 		ParseArgument(argc, argv, "-out", output);
 
-		bool mode = HasSuffix(output, ".blk");
-		std::ofstream fout(output.c_str());
-		Print(fout, hull, mode);
+		Print(output, hull);
 		std::cout << output << " written.\n";
 		}
 	else
 		{
 		// Nothing specified, so output to console
-		Print(std::cout, hull);
+		Print(stdout, hull);
 		}
 
 	return EXIT_SUCCESS;
@@ -177,18 +180,18 @@ auto Usage() -> void
 }
 
 // Get command line index of name
-auto FindArgument(int argc, char** argv, const std::string &name) -> int
+auto FindArgument(int argc, char **argv, const std::string &name) -> int
 {
 	for (int i = 1; i < argc; ++i)
-	{
+		{
 		if (std::string(argv[i]) == name)
 			return i;
-	}
+		}
 	return -1;
 }
 
 // Get the command line value (string) for name
-auto ParseArgument(int argc, char** argv, const std::string &name, std::string &val) -> int
+auto ParseArgument(int argc, char **argv, const std::string &name, std::string &val) -> int
 {
 	int index = FindArgument(argc, argv, name) + 1;
 	if (index > 0 && index < argc)
@@ -198,7 +201,7 @@ auto ParseArgument(int argc, char** argv, const std::string &name, std::string &
 }
 
 // Get the command line value (int) for name
-auto ParseArgument(int argc, char** argv, const std::string &name, int &val) -> int
+auto ParseArgument(int argc, char **argv, const std::string &name, int &val) -> int
 {
 	int index = FindArgument(argc, argv, name) + 1;
 
@@ -209,50 +212,67 @@ auto ParseArgument(int argc, char** argv, const std::string &name, int &val) -> 
 }
 
 // Check whether a string ends with a specified suffix.
-auto HasSuffix(const std::string &str, const std::string &suffix) -> bool
+auto HasExtension(const std::string &str, const std::string &suffix) -> bool
 {
 	if (str.length() >= suffix.length())
 		return (0 == str.compare(str.length() - suffix.length(), suffix.length(), suffix));
 	return false;
 }
 
-// Read a space delimited file of xy pairs into a list
+// Read a file of point coordinates into a list
 auto ReadFile(const std::string &filename) -> PointList
 {
 	PointList list;
 	Point p;
-	double z;
+	std::string line;
+	std::vector<std::string> tokens;
 
 	std::ifstream fin(filename.c_str());
 	if (fin.is_open())
 		{
 		while (fin.good())
 			{
-			fin >> p.x >> p.y >> z;
-			list.push_back(p);
+			getline(fin, line);
+			if (!line.empty())
+				{
+				tokens = Split(line, " ,\t");
+				if (tokens.size() >= 2)
+					{
+					p.x = std::atof(tokens[0].c_str());
+					p.y = std::atof(tokens[1].c_str());
+					list.push_back(p);
+					}
+				}
 			}
 		}
 
 	return list;
 }
 
-// Output a point list to a stream, space delimited by default, comma delimited if marker is set.
-auto Print(std::ostream &out, const PointList &dataset, bool marker) -> void
-	{
-	if (marker)
-		{
-		for (const auto &p : dataset)
-			{
-			out << std::fixed << std::setprecision(3) << p.x << "," << p.y << "," << marker << "\n";
-			marker = false;
-			}
-		}
+// Output a point list to a file
+auto Print(const std::string &filename, const PointList &dataset) -> void
+{
+	std::string format;
+	if (HasExtension(filename, ".csv"))
+		format = "%.3f,%.3f\n";
 	else
+		format = "%.3f  %.3f\n";
+
+	FILE *out = fopen(filename.c_str(), "w+");
+	if (out)
 		{
-		for (const auto &p : dataset)
-			{
-			out << std::fixed << std::setprecision(3) << p.x << " " << p.y << "\n";
-			}
+		Print(out, dataset, format.c_str());
+		}
+
+	fclose(out);
+}
+
+// Output a point list to a stream with a given format string
+auto Print(FILE *out, const PointList &dataset, const char *format) -> void
+{
+	for (const auto &p : dataset)
+		{
+		fprintf(out, format, p.x, p.y);
 		}
 }
 
@@ -408,9 +428,9 @@ auto IdentifyPoints(PointList &list) -> void
 	uint64_t id = 0;
 
 	for (auto itr = begin(list); itr != end(list); ++itr, ++id)
-	{
+		{
 		itr->id = id;
-	}
+		}
 }
 
 // Find the point int the list of points having the smallest y-value
@@ -429,7 +449,7 @@ auto FindMinYPoint(const PointList &list) -> Point
 // Lookup by ID and remove a point from a list of points
 auto RemovePoint(PointList &list, const Point &p) -> void
 {
-	auto itr = std::lower_bound(begin(list), end(list), p, [](const Point &a, const Point &b)
+	auto itr = std::lower_bound(begin(list), end(list), p, [](const Point & a, const Point & b)
 		{
 		return a.id < b.id;
 		});
@@ -438,7 +458,7 @@ auto RemovePoint(PointList &list, const Point &p) -> void
 
 	if (itr != end(list))
 		list.erase(itr);
-	}
+}
 
 // Add a point to a list of points
 auto AddPoint(PointList &list, const Point &p) -> void
@@ -549,17 +569,17 @@ auto RemovePointsNotInHull(PointList &dataset, const PointList &hull) -> PointLi
 {
 	std::vector<uint64_t> ids(hull.size());
 
-	transform(begin(hull), end(hull), begin(ids), [](const Point &p)
-	{
+	transform(begin(hull), end(hull), begin(ids), [](const Point & p)
+		{
 		return p.id;
-	});
+		});
 
 	sort(begin(ids), end(ids));
 
-	return remove_if(begin(dataset), end(dataset), [&ids](const Point &p)
-	{
+	return remove_if(begin(dataset), end(dataset), [&ids](const Point & p)
+		{
 		return binary_search(begin(ids), end(ids), p.id);
-	});
+		});
 }
 
 // Uses OpenMP to determine whether a condition exists in the specified range of elements. https://msdn.microsoft.com/en-us/library/ff521445.aspx
@@ -708,18 +728,18 @@ auto TestAngle() -> void
 	using std::cout;
 	using std::make_pair;
 
-	cout << "Angle to ( 5.0,  0.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  5.0,  0.0 })) << "\n";
-	cout << "Angle to ( 4.0,  3.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  4.0,  3.0 })) << "\n";
-	cout << "Angle to ( 3.0,  4.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  3.0,  4.0 })) << "\n";
-	cout << "Angle to ( 0.0,  5.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  0.0,  5.0 })) << "\n";
-	cout << "Angle to (-3.0,  4.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, { -3.0,  4.0 })) << "\n";
-	cout << "Angle to (-4.0,  3.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, { -4.0,  3.0 })) << "\n";
-	cout << "Angle to (-5.0,  0.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, { -5.0,  0.0 })) << "\n";
-	cout << "Angle to (-4.0, -3.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, { -4.0, -3.0 })) << "\n";
-	cout << "Angle to (-3.0, -4.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, { -3.0, -4.0 })) << "\n";
-	cout << "Angle to ( 0.0, -5.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  0.0, -5.0 })) << "\n";
-	cout << "Angle to ( 3.0, -4.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  3.0, -4.0 })) << "\n";
-	cout << "Angle to ( 4.0, -3.0) = " << ToDegrees(Angle( { 0.0, 0.0 }, {  4.0, -3.0 })) << "\n";
+	cout << "Angle to ( 5.0,  0.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  5.0,  0.0 })) << "\n";
+	cout << "Angle to ( 4.0,  3.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  4.0,  3.0 })) << "\n";
+	cout << "Angle to ( 3.0,  4.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  3.0,  4.0 })) << "\n";
+	cout << "Angle to ( 0.0,  5.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  0.0,  5.0 })) << "\n";
+	cout << "Angle to (-3.0,  4.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, { -3.0,  4.0 })) << "\n";
+	cout << "Angle to (-4.0,  3.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, { -4.0,  3.0 })) << "\n";
+	cout << "Angle to (-5.0,  0.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, { -5.0,  0.0 })) << "\n";
+	cout << "Angle to (-4.0, -3.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, { -4.0, -3.0 })) << "\n";
+	cout << "Angle to (-3.0, -4.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, { -3.0, -4.0 })) << "\n";
+	cout << "Angle to ( 0.0, -5.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  0.0, -5.0 })) << "\n";
+	cout << "Angle to ( 3.0, -4.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  3.0, -4.0 })) << "\n";
+	cout << "Angle to ( 4.0, -3.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  4.0, -3.0 })) << "\n";
 }
 
 // Unit test the Intersects() function
@@ -767,3 +787,76 @@ auto TestIntersects() -> void
 	Test('L', 'C', 'I', 'E', true);
 	Test('M', 'O', 'N', 'F', true);
 }
+
+auto TestSplit() -> void
+{
+	std::vector<double> expected = { -123.456, -987.654 };
+
+	auto Test = [&expected](const std::string &input)
+		{
+		auto actual = Split(input, " ,\t");
+		assert(actual.size() >= 2);
+		assert(Equal(atof(actual[0].c_str()), expected[0]));
+		assert(Equal(atof(actual[1].c_str()), expected[1]));
+		};
+
+	Test("-123.456 -987.654");
+	Test("-123.4560 -987.6540");
+	Test("-123.45600 -987.65400");
+	Test("-123.456 -987.654 ");
+	Test("-123.456 -987.654 100.5");
+	Test("-123.456 -987.654 hello");
+	Test("-123.456 -987.654 hello world");
+
+	Test("-123.456,-987.654");
+	Test("-123.4560,-987.6540");
+	Test("-123.45600,-987.65400");
+	Test("-123.456,-987.654,");
+	Test("-123.456,-987.654,100.5");
+	Test("-123.456,-987.654,hello");
+	Test("-123.456,-987.654,hello,world");
+
+	Test("-123.456\t-987.654");
+	Test("-123.4560\t-987.6540");
+	Test("-123.45600\t-987.65400");
+	Test("-123.456\t-987.654\t");
+	Test("-123.456\t-987.654\t100.5");
+	Test("-123.456\t-987.654\thello");
+	Test("-123.456\t-987.654\thello\tworld");
+
+	Test(" -123.456   -987.654   ");
+	Test(" -123.4560  -987.6540  ");
+	Test(" -123.45600 -987.65400 ");
+	Test(" -123.456   -987.654  ");
+	Test(" -123.456   -987.654  100.5");
+	Test(" -123.456   -987.654  hello");
+	Test(" -123.456   -987.654  hello   world");
+}
+
+// String tokenise
+auto Split(const std::string &value, const char *delims) -> std::vector<std::string>
+{
+	std::vector<std::string> ret;
+
+	size_t start = value.find_first_not_of(' ', 0);
+	while (start != std::string::npos)
+		{
+		size_t pos = value.find_first_of(delims, start);
+		if (pos == std::string::npos)
+			{
+			ret.push_back(value.substr(start));
+			break;
+			}
+		else
+			{
+			ret.push_back(value.substr(start, pos - start));
+
+			if (value[pos] == ' ' && strchr(delims, ' '))
+				start = value.find_first_not_of(' ', pos);
+			else
+				start = pos + 1;
+			}
+		}
+
+	return ret;
+	}
