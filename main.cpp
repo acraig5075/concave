@@ -56,31 +56,29 @@ auto Usage() -> void;
 auto FindArgument(int argc, char **argv, const std::string &name) -> int;
 auto ParseArgument(int argc, char **argv, const std::string &name, std::string &val) -> int;
 auto ParseArgument(int argc, char **argv, const std::string &name, int &val) -> int;
-auto HasExtension(const std::string &str, const std::string &suffix) -> bool;
+auto HasExtension(const std::string &filename, const std::string &ext) -> bool;
 auto ReadFile(const std::string &filename) -> PointList;
 auto Print(const std::string &filename, const PointList &dataset) -> void;
 auto Print(FILE *out, const PointList &dataset, const char *format = "%.3f  %.3f\n") -> void;
-auto RemoveDuplicates(PointList &list) -> void;
-auto IdentifyPoints(PointList &list) -> void;
 auto Split(const std::string &value, const char *delims)->std::vector<std::string>;
 
-// K-nearest neighbour search
-auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point &p, size_t k) -> PointValueList;
-auto NearestNeighboursNaive(const PointList &list, const Point &p, size_t k) -> PointValueList;
-
 // Algorithm-specific
+auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point &p, size_t k) -> PointValueList;
 auto ConcaveHull(PointList &dataset, size_t k) -> PointList;
 auto SortByAngle(PointValueList &list, const Point &p, double prevAngle) -> PointList;
 auto AddPoint(PointList &list, const Point &p) -> void;
 
 // General maths
-auto FindMinYPoint(const PointList &list) -> Point;
 auto PointsEqual(const Point &a, const Point &b) -> bool;
 auto Angle(const Point &a, const Point &b) -> double;
 auto NormaliseAngle(double radians) -> double;
-auto DistanceSquared(const Point &a, const Point &b) -> double;
 auto PointInPolygon(const Point &p, const PointList &list) -> bool;
 auto Intersects(const LineSegment &a, const LineSegment &b) -> bool;
+
+// Point list utilities
+auto FindMinYPoint(const PointList &list)->Point;
+auto RemoveDuplicates(PointList &list) -> void;
+auto IdentifyPoints(PointList &list) -> void;
 auto RemovePointsNotInHull(PointList &dataset, const PointList &hull) -> PointList::iterator;
 auto AllPointsInPolygon(PointList::iterator begin, PointList::iterator end, const PointList &hull) -> bool;
 
@@ -212,10 +210,10 @@ auto ParseArgument(int argc, char **argv, const std::string &name, int &val) -> 
 }
 
 // Check whether a string ends with a specified suffix.
-auto HasExtension(const std::string &str, const std::string &suffix) -> bool
+auto HasExtension(const std::string &filename, const std::string &ext) -> bool
 {
-	if (str.length() >= suffix.length())
-		return (0 == str.compare(str.length() - suffix.length(), suffix.length(), suffix));
+	if (filename.length() >= ext.length())
+		return (0 == filename.compare(filename.length() - ext.length(), ext.length(), ext));
 	return false;
 }
 
@@ -466,27 +464,6 @@ auto AddPoint(PointList &list, const Point &p) -> void
 	list.push_back(p);
 }
 
-// Return the k-nearest points in a list of points from the given point p (brute force algorithm).
-auto NearestNeighboursNaive(const PointList &list, const Point &p, size_t k) -> PointValueList
-{
-	std::vector<PointValue> distances(list.size());
-
-	transform(begin(list), end(list), begin(distances), [&p](const Point & e)
-		{
-		return std::make_pair(e, DistanceSquared(p, e));
-		});
-
-	sort(begin(distances), end(distances), [](const PointValue & a, const PointValue & b)
-		{
-		return LessThan(a.second, b.second);
-		});
-
-	if (distances.size() > k)
-		distances.erase(begin(distances) + k, end(distances));
-
-	return distances;
-}
-
 // Return the k-nearest points in a list of points from the given point p (uses Flann library).
 auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point &p, size_t k) -> PointValueList
 {
@@ -554,14 +531,6 @@ auto NormaliseAngle(double radians) -> double
 		return radians + M_PI + M_PI;
 	else
 		return radians;
-}
-
-// Squared distance between two points
-auto DistanceSquared(const Point &a, const Point &b) -> double
-{
-	double dx = b.x - a.x;
-	double dy = b.y - a.y;
-	return (dx * dx + dy * dy);
 }
 
 // Return the new logical end after removing points from dataset having ids belonging to hull
