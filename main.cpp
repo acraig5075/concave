@@ -31,16 +31,23 @@ struct Point
 	uint64_t id = 0;
 
 	Point() = default;
+
 	Point(double x, double y)
 		: x(x)
 		, y(y)
 	{}
 };
 
+struct PointValue
+{
+	Point point;
+	double distance = 0.0;
+	double angle = 0.0;
+};
+
 static const size_t stride = 24; // size in bytes of x, y, id
 
 using PointList = std::vector<Point>;
-using PointValue = std::pair<Point, double>;
 using PointValueList = std::vector<PointValue>;
 using LineSegment = std::pair<Point, Point>;
 
@@ -484,10 +491,10 @@ auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point 
 		{
 		int id = vIndices[i];
 		const double *point = index.getPoint(id);
-		result[i].first.x = point[0];
-		result[i].first.y = point[1];
-		result[i].first.id = id;
-		result[i].second = vDists[i];
+		result[i].point.x = point[0];
+		result[i].point.y = point[1];
+		result[i].point.id = id;
+		result[i].distance = vDists[i];
 		}
 
 	return result;
@@ -498,19 +505,19 @@ auto SortByAngle(PointValueList &list, const Point &from, double prevAngle) -> P
 {
 	for_each(begin(list), end(list), [from, prevAngle](PointValue & to)
 		{
-		to.second = NormaliseAngle(Angle(from, to.first) - prevAngle);
+		to.angle = NormaliseAngle(Angle(from, to.point) - prevAngle);
 		});
 
 	sort(begin(list), end(list), [](const PointValue & a, const PointValue & b)
 		{
-		return GreaterThan(a.second, b.second);
+		return GreaterThan(a.angle, b.angle);
 		});
 
 	PointList angled(list.size());
 
 	transform(begin(list), end(list), begin(angled), [](const PointValue & pv)
 		{
-		return pv.first;
+		return pv.point;
 		});
 
 	return angled;
