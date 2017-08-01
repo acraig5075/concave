@@ -445,7 +445,10 @@ auto FindMinYPoint(const PointList &list) -> Point
 
 	auto itr = min_element(begin(list), end(list), [](const Point & a, const Point & b)
 		{
-		return LessThan(a.y, b.y);
+		if (Equal(a.y, b.y))
+			return GreaterThan(a.x, b.x);
+		else
+			return LessThan(a.y, b.y);
 		});
 
 	return *itr;
