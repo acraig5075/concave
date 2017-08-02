@@ -71,7 +71,7 @@ auto Split(const std::string &value, const char *delims)->std::vector<std::strin
 
 // Algorithm-specific
 auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point &p, size_t k) -> PointValueList;
-auto ConcaveHull(PointList &dataset, size_t k) -> PointList;
+auto ConcaveHull(PointList &dataset, size_t k, PointList &hull) -> bool;
 auto SortByAngle(PointValueList &list, const Point &p, double prevAngle) -> PointList;
 auto AddPoint(PointList &list, const Point &p) -> void;
 
@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
 	int k = 0;
 	if (FindArgument(argc, argv, "-k") != -1)
 		ParseArgument(argc, argv, "-k", k);
-	k = std::max(k, 3);
+	k = std::min(std::max(k, 3), (int)points.size() - 1);
 
 	std::cout << "Filename         : " << filename << "\n";
 	std::cout << "Input points     : " << uncleanCount << "\n";
@@ -133,10 +133,21 @@ int main(int argc, char *argv[])
 	std::cout << "Initial 'k'      : " << k << "\n";
 	std::cout << "Final 'k'        : " << k;
 
+	PointList hull;
+
 	auto startTime = std::chrono::high_resolution_clock::now();
 
-	// The main algorithm
-	PointList hull = ConcaveHull(points, (size_t)k);
+	// The main algorithm repeats with an increasing k until success
+	while ((size_t)k < points.size())
+	{
+		PointList localHull;
+		if (ConcaveHull(points, (size_t)k, localHull))
+		{
+			hull = localHull;
+			break;
+		}
+		k++;
+	}
 
 	auto endTime = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
@@ -282,12 +293,19 @@ auto Print(FILE *out, const PointList &dataset, const char *format) -> void
 }
 
 // The main algorithm from the Moreira-Santos paper.
-auto ConcaveHull(PointList &pointList, size_t k) -> PointList
+auto ConcaveHull(PointList &pointList, size_t k, PointList &hull) -> bool
 {
+	hull.clear();
+
 	if (pointList.size() < 3)
-		return{};
+	{
+		return true;
+	}
 	if (pointList.size() == 3)
-		return pointList;
+	{
+		hull = pointList;
+		return true;
+	}
 
 	// construct a randomized kd-tree index using 4 kd-trees
 	// 2 columns, but stride = 24 bytes in width (x, y, ignoring id)
@@ -295,11 +313,9 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 	flann::Index<flann::L2<double>> flannIndex(matrix, flann::KDTreeIndexParams(4));
 	flannIndex.buildIndex();
 
-	size_t kk = std::min(std::max(k, (size_t)3), pointList.size() - 1);
-	std::cout << "\rFinal 'k'        : " << kk;
+	std::cout << "\rFinal 'k'        : " << k;
 
-	// Make a point list for storing the result hull, and initialise it with the min-y point
-	PointList hull;
+	// Initialise hull with the min-y point
 	Point firstPoint = FindMinYPoint(pointList);
 	AddPoint(hull, firstPoint);
 
@@ -321,7 +337,7 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 			flannIndex.addPoints(firstPointMatrix);
 			}
 
-		PointValueList kNearestNeighbours = NearestNeighboursFlann(flannIndex, currentPoint, kk);
+		PointValueList kNearestNeighbours = NearestNeighboursFlann(flannIndex, currentPoint, k);
 		PointList cPoints = SortByAngle(kNearestNeighbours, currentPoint, prevAngle);
 
 		bool its = true;
@@ -349,7 +365,7 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 			}
 
 		if (its)
-			return ConcaveHull(pointList, kk + 1);
+			return false;
 
 		currentPoint = cPoints[i];
 
@@ -363,13 +379,11 @@ auto ConcaveHull(PointList &pointList, size_t k) -> PointList
 		}
 
 	PointList dataset = pointList;
+
 	auto newEnd = RemovePointsNotInHull(dataset, hull);
 	bool allInside = AllPointsInPolygon(begin(dataset), newEnd, hull);
 
-	if (!allInside)
-		return ConcaveHull(pointList, kk + 1);
-
-	return hull;
+	return allInside;
 }
 
 // Compare a and b for equality
@@ -438,7 +452,7 @@ auto IdentifyPoints(PointList &list) -> void
 		}
 }
 
-// Find the point int the list of points having the smallest y-value
+// Find the point in the list of points having the smallest y-value
 auto FindMinYPoint(const PointList &list) -> Point
 {
 	assert(!list.empty());
