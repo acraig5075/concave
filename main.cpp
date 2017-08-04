@@ -71,6 +71,7 @@ auto Split(const std::string &value, const char *delims)->std::vector<std::strin
 
 // Algorithm-specific
 auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point &p, size_t k) -> PointValueList;
+auto ConcaveHull(PointList &dataset, size_t k) -> PointList;
 auto ConcaveHull(PointList &dataset, size_t k, PointList &hull) -> bool;
 auto SortByAngle(PointValueList &list, const Point &p, double prevAngle) -> PointList;
 auto AddPoint(PointList &list, const Point &p) -> void;
@@ -133,21 +134,9 @@ int main(int argc, char *argv[])
 	std::cout << "Initial 'k'      : " << k << "\n";
 	std::cout << "Final 'k'        : " << k;
 
-	PointList hull;
-
 	auto startTime = std::chrono::high_resolution_clock::now();
 
-	// The main algorithm repeats with an increasing k until success
-	while ((size_t)k < points.size())
-	{
-		PointList localHull;
-		if (ConcaveHull(points, (size_t)k, localHull))
-		{
-			hull = localHull;
-			break;
-		}
-		k++;
-	}
+	PointList hull = ConcaveHull(points, (size_t)k);
 
 	auto endTime = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
@@ -290,6 +279,22 @@ auto Print(FILE *out, const PointList &dataset, const char *format) -> void
 		{
 		fprintf(out, format, p.x, p.y);
 		}
+}
+
+// Iteratively call the main algorithm with an increasing k until success
+auto ConcaveHull(PointList &dataset, size_t k) -> PointList
+{
+	while (k < dataset.size())
+		{
+		PointList hull;
+		if (ConcaveHull(dataset, k, hull))
+			{
+			return hull;
+			}
+		k++;
+		}
+
+	return{};
 }
 
 // The main algorithm from the Moreira-Santos paper.
