@@ -14,7 +14,7 @@
 #include <flann\flann.hpp>
 #pragma warning(pop)
 
-#define USE_OPENMP // parallel PointInPolygon test
+#define USE_OPENMP
 
 #if defined USE_OPENMP
 #if !defined _OPENMP
@@ -47,8 +47,8 @@ struct PointValue
 
 static const size_t stride = 24; // size in bytes of x, y, id
 
-using PointList = std::vector<Point>;
-using PointValueList = std::vector<PointValue>;
+using PointVector = std::vector<Point>;
+using PointValueVector = std::vector<PointValue>;
 using LineSegment = std::pair<Point, Point>;
 
 // Floating point comparisons
@@ -64,33 +64,33 @@ auto FindArgument(int argc, char **argv, const std::string &name) -> int;
 auto ParseArgument(int argc, char **argv, const std::string &name, std::string &val) -> int;
 auto ParseArgument(int argc, char **argv, const std::string &name, int &val) -> int;
 auto HasExtension(const std::string &filename, const std::string &ext) -> bool;
-auto ReadFile(const std::string &filename) -> PointList;
-auto Print(const std::string &filename, const PointList &dataset) -> void;
-auto Print(FILE *out, const PointList &dataset, const char *format = "%.3f  %.3f\n") -> void;
-auto Split(const std::string &value, const char *delims)->std::vector<std::string>;
+auto ReadFile(const std::string &filename) -> PointVector;
+auto Print(const std::string &filename, const PointVector &points) -> void;
+auto Print(FILE *out, const PointVector &points, const char *format = "%.3f  %.3f\n") -> void;
+auto Split(const std::string &value, const char *delims) -> std::vector<std::string>;
 
 // Algorithm-specific
-auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point &p, size_t k) -> PointValueList;
-auto ConcaveHull(PointList &dataset, size_t k) -> PointList;
-auto ConcaveHull(PointList &dataset, size_t k, PointList &hull) -> bool;
-auto SortByAngle(PointValueList &list, const Point &p, double prevAngle) -> PointList;
-auto AddPoint(PointList &list, const Point &p) -> void;
+auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point &p, size_t k) -> PointValueVector;
+auto ConcaveHull(PointVector &dataset, size_t k) -> PointVector;
+auto ConcaveHull(PointVector &dataset, size_t k, PointVector &hull) -> bool;
+auto SortByAngle(PointValueVector &values, const Point &p, double prevAngle) -> PointVector;
+auto AddPoint(PointVector &points, const Point &p) -> void;
 
 // General maths
 auto PointsEqual(const Point &a, const Point &b) -> bool;
 auto Angle(const Point &a, const Point &b) -> double;
 auto NormaliseAngle(double radians) -> double;
-auto PointInPolygon(const Point &p, const PointList &list) -> bool;
+auto PointInPolygon(const Point &p, const PointVector &list) -> bool;
 auto Intersects(const LineSegment &a, const LineSegment &b) -> bool;
 
 // Point list utilities
-auto FindMinYPoint(const PointList &list)->Point;
-auto RemoveDuplicates(PointList &list) -> void;
-auto IdentifyPoints(PointList &list) -> void;
-auto RemovePointsNotInHull(PointList &dataset, const PointList &hull) -> PointList::iterator;
-auto AllPointsInPolygon(PointList::iterator begin, PointList::iterator end, const PointList &hull) -> bool;
+auto FindMinYPoint(const PointVector &points) -> Point;
+auto RemoveDuplicates(PointVector &points) -> void;
+auto IdentifyPoints(PointVector &points) -> void;
+auto RemoveHull(PointVector &points, const PointVector &hull) -> PointVector::iterator;
+auto MultiplePointInPolygon(PointVector::iterator begin, PointVector::iterator end, const PointVector &hull) -> bool;
 
-// Testing
+// Unit tests
 auto TestAngle() -> void;
 auto TestIntersects() -> void;
 auto TestSplit() -> void;
@@ -99,6 +99,8 @@ auto TestSplit() -> void;
 
 int main(int argc, char *argv[])
 {
+	//TestAngle()
+	//TestIntersects();
 	//TestSplit();
 
 	std::cout << "Concave hull: A k-nearest neighbours approach.\n";
@@ -114,7 +116,7 @@ int main(int argc, char *argv[])
 	ParseArgument(argc, argv, "-in", filename);
 
 	// Read input
-	PointList points = ReadFile(filename);
+	PointVector points = ReadFile(filename);
 	size_t uncleanCount = points.size();
 
 	// Remove duplicates and id the points
@@ -136,7 +138,7 @@ int main(int argc, char *argv[])
 
 	auto startTime = std::chrono::high_resolution_clock::now();
 
-	PointList hull = ConcaveHull(points, (size_t)k);
+	PointVector hull = ConcaveHull(points, (size_t)k);
 
 	auto endTime = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
@@ -176,12 +178,12 @@ int main(int argc, char *argv[])
 // Print program usage info.
 auto Usage() -> void
 {
-	std::cout << "Usage: concave.exe -in filename [-out filename] [-k starting k-value] [-no_out]\n";
+	std::cout << "Usage: concave.exe -in filename [-out filename] [-k starting K-value] [-no_out]\n";
 	std::cout << "\n";
-	std::cout << " -in                    : file of x y z input coordinates, one row per point, z is ignored.\n";
-	std::cout << " -out        (optional) : file for the hull polygon x y coordinates, one row per point. Default=stdout.\n";
-	std::cout << " -k          (optional) : start iteration K value. Default=3.\n";
-	std::cout << " -no_out     (optional) : disable output of the hull polygon coordinates.\n";
+	std::cout << " -in                 : file of input coordinates, one row per point, only first two fields are used.\n";
+	std::cout << " -out     (optional) : file for the hull polygon coordinates, one row per point. Default=stdout.\n";
+	std::cout << " -k       (optional) : start iteration K value. Default=3.\n";
+	std::cout << " -no_out  (optional) : disable output of the hull polygon coordinates.\n";
 }
 
 // Get command line index of name
@@ -224,10 +226,10 @@ auto HasExtension(const std::string &filename, const std::string &ext) -> bool
 	return false;
 }
 
-// Read a file of point coordinates into a list
-auto ReadFile(const std::string &filename) -> PointList
+// Read a file of coordinates into a vector. First two fields of comma/tab/space delimited input are used.
+auto ReadFile(const std::string &filename) -> PointVector
 {
-	PointList list;
+	PointVector list;
 	Point p;
 	std::string line;
 	std::vector<std::string> tokens;
@@ -255,7 +257,7 @@ auto ReadFile(const std::string &filename) -> PointList
 }
 
 // Output a point list to a file
-auto Print(const std::string &filename, const PointList &dataset) -> void
+auto Print(const std::string &filename, const PointVector &points) -> void
 {
 	std::string format;
 	if (HasExtension(filename, ".csv"))
@@ -266,27 +268,27 @@ auto Print(const std::string &filename, const PointList &dataset) -> void
 	FILE *out = fopen(filename.c_str(), "w+");
 	if (out)
 		{
-		Print(out, dataset, format.c_str());
+		Print(out, points, format.c_str());
 		}
 
 	fclose(out);
 }
 
 // Output a point list to a stream with a given format string
-auto Print(FILE *out, const PointList &dataset, const char *format) -> void
+auto Print(FILE *out, const PointVector &points, const char *format) -> void
 {
-	for (const auto &p : dataset)
+	for (const auto &p : points)
 		{
 		fprintf(out, format, p.x, p.y);
 		}
 }
 
 // Iteratively call the main algorithm with an increasing k until success
-auto ConcaveHull(PointList &dataset, size_t k) -> PointList
+auto ConcaveHull(PointVector &dataset, size_t k) -> PointVector
 {
 	while (k < dataset.size())
 		{
-		PointList hull;
+		PointVector hull;
 		if (ConcaveHull(dataset, k, hull))
 			{
 			return hull;
@@ -298,7 +300,7 @@ auto ConcaveHull(PointList &dataset, size_t k) -> PointList
 }
 
 // The main algorithm from the Moreira-Santos paper.
-auto ConcaveHull(PointList &pointList, size_t k, PointList &hull) -> bool
+auto ConcaveHull(PointVector &pointList, size_t k, PointVector &hull) -> bool
 {
 	hull.clear();
 
@@ -342,8 +344,8 @@ auto ConcaveHull(PointList &pointList, size_t k, PointList &hull) -> bool
 			flannIndex.addPoints(firstPointMatrix);
 			}
 
-		PointValueList kNearestNeighbours = NearestNeighboursFlann(flannIndex, currentPoint, k);
-		PointList cPoints = SortByAngle(kNearestNeighbours, currentPoint, prevAngle);
+		PointValueVector kNearestNeighbours = NearestNeighboursFlann(flannIndex, currentPoint, k);
+		PointVector cPoints = SortByAngle(kNearestNeighbours, currentPoint, prevAngle);
 
 		bool its = true;
 		size_t i = 0;
@@ -383,12 +385,13 @@ auto ConcaveHull(PointList &pointList, size_t k, PointList &hull) -> bool
 		step++;
 		}
 
-	PointList dataset = pointList;
+	// The original points less the points belonging to the hull need to be fully enclosed by the hull in order to return true.
+	PointVector dataset = pointList;
 
-	auto newEnd = RemovePointsNotInHull(dataset, hull);
-	bool allInside = AllPointsInPolygon(begin(dataset), newEnd, hull);
+	auto newEnd = RemoveHull(dataset, hull);
+	bool allEnclosed = MultiplePointInPolygon(begin(dataset), newEnd, hull);
 
-	return allInside;
+	return allEnclosed;
 }
 
 // Compare a and b for equality
@@ -428,9 +431,9 @@ auto PointsEqual(const Point &a, const Point &b) -> bool
 }
 
 // Remove duplicates in a list of points
-auto RemoveDuplicates(PointList &list) -> void
+auto RemoveDuplicates(PointVector &points) -> void
 {
-	sort(begin(list), end(list), [](const Point & a, const Point & b)
+	sort(begin(points), end(points), [](const Point & a, const Point & b)
 		{
 		if (Equal(a.x, b.x))
 			return LessThan(a.y, b.y);
@@ -438,31 +441,31 @@ auto RemoveDuplicates(PointList &list) -> void
 			return LessThan(a.x, b.x);
 		});
 
-	auto newEnd = unique(begin(list), end(list), [](const Point & a, const Point & b)
+	auto newEnd = unique(begin(points), end(points), [](const Point & a, const Point & b)
 		{
 		return PointsEqual(a, b);
 		});
 
-	list.erase(newEnd, end(list));
+	points.erase(newEnd, end(points));
 }
 
 // Uniquely id the points for binary searching
-auto IdentifyPoints(PointList &list) -> void
+auto IdentifyPoints(PointVector &points) -> void
 {
 	uint64_t id = 0;
 
-	for (auto itr = begin(list); itr != end(list); ++itr, ++id)
+	for (auto itr = begin(points); itr != end(points); ++itr, ++id)
 		{
 		itr->id = id;
 		}
 }
 
-// Find the point in the list of points having the smallest y-value
-auto FindMinYPoint(const PointList &list) -> Point
+// Find the point having the smallest y-value
+auto FindMinYPoint(const PointVector &points) -> Point
 {
-	assert(!list.empty());
+	assert(!points.empty());
 
-	auto itr = min_element(begin(list), end(list), [](const Point & a, const Point & b)
+	auto itr = min_element(begin(points), end(points), [](const Point & a, const Point & b)
 		{
 		if (Equal(a.y, b.y))
 			return GreaterThan(a.x, b.x);
@@ -474,7 +477,7 @@ auto FindMinYPoint(const PointList &list) -> Point
 }
 
 // Lookup by ID and remove a point from a list of points
-auto RemovePoint(PointList &list, const Point &p) -> void
+auto RemovePoint(PointVector &list, const Point &p) -> void
 {
 	auto itr = std::lower_bound(begin(list), end(list), p, [](const Point & a, const Point & b)
 		{
@@ -488,13 +491,13 @@ auto RemovePoint(PointList &list, const Point &p) -> void
 }
 
 // Add a point to a list of points
-auto AddPoint(PointList &list, const Point &p) -> void
+auto AddPoint(PointVector &points, const Point &p) -> void
 {
-	list.push_back(p);
+	points.push_back(p);
 }
 
 // Return the k-nearest points in a list of points from the given point p (uses Flann library).
-auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point &p, size_t k) -> PointValueList
+auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point &p, size_t k) -> PointValueVector
 {
 	std::vector<int> vIndices(k);
 	std::vector<double> vDists(k);
@@ -507,7 +510,7 @@ auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point 
 	int count_ = index.knnSearch(query, mIndices, mDists, k, flann::SearchParams(128));
 	size_t count = static_cast<size_t>(count_);
 
-	PointValueList result(count);
+	PointValueVector result(count);
 
 	for (size_t i = 0; i < count; ++i)
 		{
@@ -523,21 +526,21 @@ auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point 
 }
 
 // Returns a list of points sorted in descending order of clockwise angle
-auto SortByAngle(PointValueList &list, const Point &from, double prevAngle) -> PointList
+auto SortByAngle(PointValueVector &values, const Point &from, double prevAngle) -> PointVector
 {
-	for_each(begin(list), end(list), [from, prevAngle](PointValue & to)
+	for_each(begin(values), end(values), [from, prevAngle](PointValue & to)
 		{
 		to.angle = NormaliseAngle(Angle(from, to.point) - prevAngle);
 		});
 
-	sort(begin(list), end(list), [](const PointValue & a, const PointValue & b)
+	sort(begin(values), end(values), [](const PointValue & a, const PointValue & b)
 		{
 		return GreaterThan(a.angle, b.angle);
 		});
 
-	PointList angled(list.size());
+	PointVector angled(values.size());
 
-	transform(begin(list), end(list), begin(angled), [](const PointValue & pv)
+	transform(begin(values), end(values), begin(angled), [](const PointValue & pv)
 		{
 		return pv.point;
 		});
@@ -563,7 +566,7 @@ auto NormaliseAngle(double radians) -> double
 }
 
 // Return the new logical end after removing points from dataset having ids belonging to hull
-auto RemovePointsNotInHull(PointList &dataset, const PointList &hull) -> PointList::iterator
+auto RemoveHull(PointVector &points, const PointVector &hull) -> PointVector::iterator
 {
 	std::vector<uint64_t> ids(hull.size());
 
@@ -574,7 +577,7 @@ auto RemovePointsNotInHull(PointList &dataset, const PointList &hull) -> PointLi
 
 	sort(begin(ids), end(ids));
 
-	return remove_if(begin(dataset), end(dataset), [&ids](const Point & p)
+	return remove_if(begin(points), end(points), [&ids](const Point & p)
 		{
 		return binary_search(begin(ids), end(ids), p.id);
 		});
@@ -608,7 +611,7 @@ bool omp_parallel_any_of(InIt first, InIt last, const Predicate &pr)
 }
 
 // Check whether all points in a begin/end range are inside hull.
-auto AllPointsInPolygon(PointList::iterator begin, PointList::iterator end, const PointList &hull) -> bool
+auto MultiplePointInPolygon(PointVector::iterator begin, PointVector::iterator end, const PointVector &hull) -> bool
 {
 	auto test = [&hull](const Point & p)
 		{
@@ -619,11 +622,11 @@ auto AllPointsInPolygon(PointList::iterator begin, PointList::iterator end, cons
 
 #if defined USE_OPENMP
 
-	anyOutside = omp_parallel_any_of(begin, end, test); // multi threaded
+	anyOutside = omp_parallel_any_of(begin, end, test); // multi-threaded
 
 #else
 
-	anyOutside = std::any_of(begin, end, test); // single threaded
+	anyOutside = std::any_of(begin, end, test); // single-threaded
 
 #endif
 
@@ -631,7 +634,7 @@ auto AllPointsInPolygon(PointList::iterator begin, PointList::iterator end, cons
 }
 
 // Point-in-polygon test
-auto PointInPolygon(const Point &p, const PointList &list) -> bool
+auto PointInPolygon(const Point &p, const PointVector &list) -> bool
 {
 	if (list.size() <= 2)
 		return false;
@@ -831,7 +834,7 @@ auto TestSplit() -> void
 	Test(" -123.456   -987.654  hello   world");
 }
 
-// String tokenise
+// String tokenise using any one of delimiters, adjacent spaces are treated as one
 auto Split(const std::string &value, const char *delims) -> std::vector<std::string>
 {
 	std::vector<std::string> ret;
@@ -857,4 +860,4 @@ auto Split(const std::string &value, const char *delims) -> std::vector<std::str
 		}
 
 	return ret;
-	}
+}
