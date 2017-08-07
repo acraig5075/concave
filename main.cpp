@@ -71,7 +71,7 @@ auto Split(const std::string &value, const char *delims) -> std::vector<std::str
 
 // Algorithm-specific
 auto NearestNeighboursFlann(flann::Index<flann::L2<double>> &index, const Point &p, size_t k) -> PointValueVector;
-auto ConcaveHull(PointVector &dataset, size_t k) -> PointVector;
+auto ConcaveHull(PointVector &dataset, size_t k, bool iterate) -> PointVector;
 auto ConcaveHull(PointVector &dataset, size_t k, PointVector &hull) -> bool;
 auto SortByAngle(PointValueVector &values, const Point &p, double prevAngle) -> PointVector;
 auto AddPoint(PointVector &points, const Point &p) -> void;
@@ -130,6 +130,11 @@ int main(int argc, char *argv[])
 		ParseArgument(argc, argv, "-k", k);
 	k = std::min(std::max(k, 3), (int)points.size() - 1);
 
+	// For debug purposes, optionally disable iterating k.
+	bool iterate = true;
+	if (FindArgument(argc, argv, "-no_iterate") != -1)
+		iterate = false;
+
 	std::cout << "Filename         : " << filename << "\n";
 	std::cout << "Input points     : " << uncleanCount << "\n";
 	std::cout << "Input (cleaned)  : " << cleanCount << "\n";
@@ -138,7 +143,7 @@ int main(int argc, char *argv[])
 
 	auto startTime = std::chrono::high_resolution_clock::now();
 
-	PointVector hull = ConcaveHull(points, (size_t)k);
+	PointVector hull = ConcaveHull(points, (size_t)k, iterate);
 
 	auto endTime = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
@@ -180,10 +185,11 @@ auto Usage() -> void
 {
 	std::cout << "Usage: concave.exe -in filename [-out filename] [-k starting K-value] [-no_out]\n";
 	std::cout << "\n";
-	std::cout << " -in                 : file of input coordinates, one row per point, only first two fields are used.\n";
-	std::cout << " -out     (optional) : file for the hull polygon coordinates, one row per point. Default=stdout.\n";
-	std::cout << " -k       (optional) : start iteration K value. Default=3.\n";
-	std::cout << " -no_out  (optional) : disable output of the hull polygon coordinates.\n";
+	std::cout << " -in                     : file of input coordinates, one row per point, only first two fields are used.\n";
+	std::cout << " -out         (optional) : file for the hull polygon coordinates, one row per point. Default=stdout.\n";
+	std::cout << " -k           (optional) : start iteration K value. Default=3.\n";
+	std::cout << " -no_out      (optional) : disable output of the hull polygon coordinates.\n";
+	std::cout << " -no_iterate  (optional) : stop after only one iteration of K, irrespective of result.\n";
 }
 
 // Get command line index of name
@@ -284,12 +290,12 @@ auto Print(FILE *out, const PointVector &points, const char *format) -> void
 }
 
 // Iteratively call the main algorithm with an increasing k until success
-auto ConcaveHull(PointVector &dataset, size_t k) -> PointVector
+auto ConcaveHull(PointVector &dataset, size_t k, bool iterate) -> PointVector
 {
 	while (k < dataset.size())
 		{
 		PointVector hull;
-		if (ConcaveHull(dataset, k, hull))
+		if (ConcaveHull(dataset, k, hull) || !iterate)
 			{
 			return hull;
 			}
