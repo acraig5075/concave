@@ -154,11 +154,11 @@ int main(int argc, char *argv[])
 	PointVector hull = ConcaveHull(points, (size_t)k, iterate);
 
 	auto endTime = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration_cast<std::chrono::seconds>(endTime - startTime).count();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
 
 	std::cout << "\n";
 	std::cout << "Output points    : " << hull.size() << "\n";
-	std::cout << "Time             : " << duration << "s\n";
+	std::cout << "Time (excl. i/o) : " << std::fixed << std::setprecision(1) << (double)duration / 1000.0 << "s\n";
 	std::cout << "\n";
 
 	// Optional no further output
