@@ -64,7 +64,7 @@ auto FindArgument(int argc, char **argv, const std::string &name) -> int;
 auto ParseArgument(int argc, char **argv, const std::string &name, std::string &val) -> int;
 auto ParseArgument(int argc, char **argv, const std::string &name, int &val) -> int;
 auto HasExtension(const std::string &filename, const std::string &ext) -> bool;
-auto ReadFile(const std::string &filename) -> PointVector;
+auto ReadFile(const std::string &filename, int fieldX = 1, int fieldY = 2) -> PointVector;
 auto Print(const std::string &filename, const PointVector &points) -> void;
 auto Print(FILE *out, const PointVector &points, const char *format = "%.3f  %.3f\n") -> void;
 auto Split(const std::string &value, const char *delims) -> std::vector<std::string>;
@@ -115,8 +115,16 @@ int main(int argc, char *argv[])
 	std::string filename;
 	ParseArgument(argc, argv, "-in", filename);
 
+	// The input field numbers for x and y coordinates
+	int fieldX = 1;
+	int fieldY = 2;
+	if (FindArgument(argc, argv, "-field_for_x") == -1)
+		ParseArgument(argc, argv, "-field_for_x", fieldX);
+	if (FindArgument(argc, argv, "-field_for_y") == -1)
+		ParseArgument(argc, argv, "-field_for_y", fieldY);
+
 	// Read input
-	PointVector points = ReadFile(filename);
+	PointVector points = ReadFile(filename, fieldX, fieldY);
 	size_t uncleanCount = points.size();
 
 	// Remove duplicates and id the points
@@ -190,6 +198,8 @@ auto Usage() -> void
 	std::cout << " -k           (optional) : start iteration K value. Default=3.\n";
 	std::cout << " -no_out      (optional) : disable output of the hull polygon coordinates.\n";
 	std::cout << " -no_iterate  (optional) : stop after only one iteration of K, irrespective of result.\n";
+	std::cout << " -field_for_x (optional) : 1-based column number of input for x-coordinate. Default=1.\n";
+	std::cout << " -field_for_y (optional) : 1-based column number of input for y-coordinate. Default=2.\n";
 }
 
 // Get command line index of name
@@ -233,8 +243,11 @@ auto HasExtension(const std::string &filename, const std::string &ext) -> bool
 }
 
 // Read a file of coordinates into a vector. First two fields of comma/tab/space delimited input are used.
-auto ReadFile(const std::string &filename) -> PointVector
+auto ReadFile(const std::string &filename, int fieldX, int fieldY) -> PointVector
 {
+	fieldX--; // from 1-based index to 0-based
+	fieldY--;
+
 	PointVector list;
 	Point p;
 	std::string line;
@@ -251,8 +264,8 @@ auto ReadFile(const std::string &filename) -> PointVector
 				tokens = Split(line, " ,\t");
 				if (tokens.size() >= 2)
 					{
-					p.x = std::atof(tokens[0].c_str());
-					p.y = std::atof(tokens[1].c_str());
+					p.x = std::atof(tokens[fieldX].c_str());
+					p.y = std::atof(tokens[fieldY].c_str());
 					list.push_back(p);
 					}
 				}
