@@ -106,14 +106,13 @@ int main(int argc, char *argv[])
 	std::cout << "Concave hull: A k-nearest neighbours approach.\n";
 
 	// input filename is the only requirement
-	if (FindArgument(argc, argv, "-in") == -1)
+	if (argc == 1)
 		{
 		Usage();
 		return EXIT_FAILURE;
 		}
 
-	std::string filename;
-	ParseArgument(argc, argv, "-in", filename);
+	std::string filename(argv[1]);
 
 	// The input field numbers for x and y coordinates
 	int fieldX = 1;
@@ -191,15 +190,15 @@ int main(int argc, char *argv[])
 // Print program usage info.
 auto Usage() -> void
 {
-	std::cout << "Usage: concave.exe -in filename [-out filename] [-k starting K-value] [-no_out]\n";
+	std::cout << "Usage: concave.exe filename [-out arg] [-k arg] [-field_for_x arg] [-field_for_y arg] [-no_out] [-no_iterate]\n";
 	std::cout << "\n";
-	std::cout << " -in                     : file of input coordinates, one row per point, only first two fields are used.\n";
-	std::cout << " -out         (optional) : file for the hull polygon coordinates, one row per point. Default=stdout.\n";
-	std::cout << " -k           (optional) : start iteration K value. Default=3.\n";
-	std::cout << " -no_out      (optional) : disable output of the hull polygon coordinates.\n";
-	std::cout << " -no_iterate  (optional) : stop after only one iteration of K, irrespective of result.\n";
-	std::cout << " -field_for_x (optional) : 1-based column number of input for x-coordinate. Default=1.\n";
-	std::cout << " -field_for_y (optional) : 1-based column number of input for y-coordinate. Default=2.\n";
+	std::cout << " filename      (required) : file of input coordinates, one row per point.\n";
+	std::cout << " -out          (optional) : output file for the hull polygon coordinates. Default=stdout.\n";
+	std::cout << " -k            (optional) : start iteration K value. Default=3.\n";
+	std::cout << " -field_for_x  (optional) : 1-based column number of input for x-coordinate. Default=1.\n";
+	std::cout << " -field_for_y  (optional) : 1-based column number of input for y-coordinate. Default=2.\n";
+	std::cout << " -no_out       (optional) : disable output of the hull polygon coordinates.\n";
+	std::cout << " -no_iterate   (optional) : stop after only one iteration of K, irrespective of result.\n";
 }
 
 // Get command line index of name
