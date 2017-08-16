@@ -99,7 +99,7 @@ auto TestSplit() -> void;
 
 int main(int argc, char *argv[])
 {
-	//TestAngle()
+	//TestAngle();
 	//TestIntersects();
 	//TestSplit();
 
@@ -287,9 +287,9 @@ auto Print(const std::string &filename, const PointVector &points) -> void
 	if (out)
 		{
 		Print(out, points, format.c_str());
-		}
 
-	fclose(out);
+		fclose(out);
+		}
 }
 
 // Output a point list to a stream with a given format string
@@ -738,27 +738,26 @@ auto TestAngle() -> void
 		return radians * 180.0 / M_PI;
 		};
 
-	//assert(Equal(56.0, ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(-2.0, 3.0)))));
-	//assert(Equal(135.0, ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(2.0, 2.0)))));
-	//assert(Equal(18.0, ToDegrees(Angle(make_pair(0.0, 0.0), make_pair(-3.0, 1.0)))));
+	auto Test = [&](const Point &p, double expected)
+		{
+		double actual = ToDegrees(Angle({ 0.0, 0.0 }, p));
+		assert(Equal(actual, expected));
+		};
 
-	// if above answers actually -146, 135 and -108 then reverse the order of the atan2 parameters
+	double value = ToDegrees(atan(3.0 / 4.0));
 
-	using std::cout;
-	using std::make_pair;
-
-	cout << "Angle to ( 5.0,  0.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  5.0,  0.0 })) << "\n";
-	cout << "Angle to ( 4.0,  3.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  4.0,  3.0 })) << "\n";
-	cout << "Angle to ( 3.0,  4.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  3.0,  4.0 })) << "\n";
-	cout << "Angle to ( 0.0,  5.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  0.0,  5.0 })) << "\n";
-	cout << "Angle to (-3.0,  4.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, { -3.0,  4.0 })) << "\n";
-	cout << "Angle to (-4.0,  3.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, { -4.0,  3.0 })) << "\n";
-	cout << "Angle to (-5.0,  0.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, { -5.0,  0.0 })) << "\n";
-	cout << "Angle to (-4.0, -3.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, { -4.0, -3.0 })) << "\n";
-	cout << "Angle to (-3.0, -4.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, { -3.0, -4.0 })) << "\n";
-	cout << "Angle to ( 0.0, -5.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  0.0, -5.0 })) << "\n";
-	cout << "Angle to ( 3.0, -4.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  3.0, -4.0 })) << "\n";
-	cout << "Angle to ( 4.0, -3.0) = " << ToDegrees(Angle({ 0.0, 0.0 }, {  4.0, -3.0 })) << "\n";
+	Test({  5.0,  0.0 }, 0.0);
+	Test({  4.0,  3.0 }, 360.0 - value);
+	Test({  3.0,  4.0 }, 270.0 + value);
+	Test({  0.0,  5.0 }, 270.0);
+	Test({ -3.0,  4.0 }, 270.0 - value);
+	Test({ -4.0,  3.0 }, 180.0 + value);
+	Test({ -5.0,  0.0 }, 180.0);
+	Test({ -4.0, -3.0 }, 180.0 - value);
+	Test({ -3.0, -4.0 }, 90.0 + value);
+	Test({  0.0, -5.0 }, 90.0);
+	Test({  3.0, -4.0 }, 90.0 - value);
+	Test({  4.0, -3.0 }, 0.0 + value);
 }
 
 // Unit test the Intersects() function
