@@ -117,9 +117,9 @@ int main(int argc, char *argv[])
 	// The input field numbers for x and y coordinates
 	int fieldX = 1;
 	int fieldY = 2;
-	if (FindArgument(argc, argv, "-field_for_x") == -1)
+	if (FindArgument(argc, argv, "-field_for_x") != -1)
 		ParseArgument(argc, argv, "-field_for_x", fieldX);
-	if (FindArgument(argc, argv, "-field_for_y") == -1)
+	if (FindArgument(argc, argv, "-field_for_y") != -1)
 		ParseArgument(argc, argv, "-field_for_y", fieldY);
 
 	// Read input
