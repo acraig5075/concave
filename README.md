@@ -1,7 +1,12 @@
 # concave
-A C++ implementation of a [published algorithm](https://www.researchgate.net/publication/220868874_Concave_hull_A_k-nearest_neighbours_approach_for_the_computation_of_the_region_occupied_by_a_set_of_points) for computing the concave hull using a k-nearest neighbour approach.
+A C++ implementation of an [algorithm](https://www.researchgate.net/publication/220868874_Concave_hull_A_k-nearest_neighbours_approach_for_the_computation_of_the_region_occupied_by_a_set_of_points) for computing the concave hull using a k-nearest neighbour approach.
+
+![Screenshot](screenshot.png?raw=true "Screenshot")
+
+The blue outline is the concave hull of 4726 input points, it has 406 polygon vertices and took 0.1 seconds to compute.
 
 ## My Codeproject article
+I wrote an article about this.
 [The Concave Hull of a Set of Points](https://www.codeproject.com/Articles/1201438/The-Concave-Hull-of-a-Set-of-Points)
 
 
