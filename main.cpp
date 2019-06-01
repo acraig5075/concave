@@ -253,21 +253,14 @@ auto ReadFile(const std::string &filename, int fieldX, int fieldY) -> PointVecto
 	std::vector<std::string> tokens;
 
 	std::ifstream fin(filename.c_str());
-	if (fin.is_open())
+	while (getline(fin, line) && !line.empty())
 		{
-		while (fin.good())
+		tokens = Split(line, " ,\t");
+		if (tokens.size() >= 2)
 			{
-			getline(fin, line);
-			if (!line.empty())
-				{
-				tokens = Split(line, " ,\t");
-				if (tokens.size() >= 2)
-					{
-					p.x = std::atof(tokens[fieldX].c_str());
-					p.y = std::atof(tokens[fieldY].c_str());
-					list.push_back(p);
-					}
-				}
+			p.x = std::atof(tokens[fieldX].c_str());
+			p.y = std::atof(tokens[fieldY].c_str());
+			list.push_back(p);
 			}
 		}
 
