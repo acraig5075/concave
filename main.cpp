@@ -398,7 +398,6 @@ auto ConcaveHull(PointVector &pointList, size_t k, PointVector &hull) -> bool
 
 	// The original points less the points belonging to the hull need to be fully enclosed by the hull in order to return true.
 	PointVector dataset = pointList;
-
 	auto newEnd = RemoveHull(dataset, hull);
 	bool allEnclosed = MultiplePointInPolygon(begin(dataset), newEnd, hull);
 
@@ -624,6 +623,9 @@ bool omp_parallel_any_of(InIt first, InIt last, const Predicate &pr)
 // Check whether all points in a begin/end range are inside hull.
 auto MultiplePointInPolygon(PointVector::iterator begin, PointVector::iterator end, const PointVector &hull) -> bool
 {
+	if (begin == end)
+		return false;
+
 	auto test = [&hull](const Point & p)
 		{
 		return !PointInPolygon(p, hull);
