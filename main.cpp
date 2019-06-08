@@ -135,7 +135,7 @@ int main(int argc, char *argv[])
 	int k = 0;
 	if (FindArgument(argc, argv, "-k") != -1)
 		ParseArgument(argc, argv, "-k", k);
-	k = std::min(std::max(k, 3), (int)points.size() - 1);
+	k = std::min(std::max(k, 4), (int)points.size() - 1);
 
 	// For debug purposes, optionally disable iterating k.
 	bool iterate = true;
