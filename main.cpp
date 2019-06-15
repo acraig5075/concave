@@ -63,8 +63,9 @@ auto Usage() -> void;
 auto FindArgument(int argc, char **argv, const std::string &name) -> int;
 auto ParseArgument(int argc, char **argv, const std::string &name, std::string &val) -> int;
 auto ParseArgument(int argc, char **argv, const std::string &name, int &val) -> int;
+auto ParseArgument(int argc, char **argv, const std::string &name, double &val) -> int;
 auto HasExtension(const std::string &filename, const std::string &ext) -> bool;
-auto ReadFile(const std::string &filename, int fieldX = 1, int fieldY = 2) -> PointVector;
+auto ReadFile(const std::string &filename, int fieldX = 1, int fieldY = 2, bool scaling = false, double scaleFactor = 1.0) -> PointVector;
 auto Print(const std::string &filename, const PointVector &points) -> void;
 auto Print(FILE *out, const PointVector &points, const char *format = "%.3f  %.3f\n") -> void;
 auto Split(const std::string &value, const char *delims) -> std::vector<std::string>;
@@ -129,8 +130,15 @@ int main(int argc, char *argv[])
 	if (FindArgument(argc, argv, "-field_for_y") != -1)
 		ParseArgument(argc, argv, "-field_for_y", fieldY);
 
+	// Scale factor
+	bool scaling = false;
+	double scaleFactor = 0.0;
+	if (FindArgument(argc, argv, "-scale_factor") != -1)
+		ParseArgument(argc, argv, "-scale_factor", scaleFactor);
+	scaling = !Zero(scaleFactor);
+
 	// Read input
-	PointVector points = ReadFile(filename, fieldX, fieldY);
+	PointVector points = ReadFile(filename, fieldX, fieldY, scaling, scaleFactor);
 	size_t uncleanCount = points.size();
 
 	// Remove duplicates and id the points
@@ -166,6 +174,16 @@ int main(int argc, char *argv[])
 	std::cout << "Output points    : " << hull.size() << "\n";
 	std::cout << "Time (excl. i/o) : " << std::fixed << std::setprecision(1) << (double)duration / 1000.0 << "s\n";
 	std::cout << "\n";
+
+	if (scaling)
+	{
+		// revert the scaling
+		std::for_each(begin(hull), end(hull), [scaleFactor](Point &p)
+		{
+			p.x /= scaleFactor;
+			p.y /= scaleFactor;
+		});
+	}
 
 	// Optional no further output
 	if (FindArgument(argc, argv, "-no_out") != -1)
@@ -206,6 +224,7 @@ auto Usage() -> void
 	std::cout << " -field_for_y  (optional) : 1-based column number of input for y-coordinate. Default=2.\n";
 	std::cout << " -no_out       (optional) : disable output of the hull polygon coordinates.\n";
 	std::cout << " -no_iterate   (optional) : stop after only one iteration of K, irrespective of result.\n";
+	std::cout << " -scale_factor (optional) : scale factor to apply to input coordinates. Default=1.0(none).\n";
 }
 
 // Get command line index of name
@@ -240,6 +259,17 @@ auto ParseArgument(int argc, char **argv, const std::string &name, int &val) -> 
 	return (index - 1);
 }
 
+// Get the command line value (double) for name
+auto ParseArgument(int argc, char **argv, const std::string &name, double &val) -> int
+{
+	int index = FindArgument(argc, argv, name) + 1;
+
+	if (index > 0 && index < argc)
+		val = atof(argv[index]);
+
+	return (index - 1);
+}
+
 // Check whether a string ends with a specified suffix.
 auto HasExtension(const std::string &filename, const std::string &ext) -> bool
 {
@@ -249,7 +279,7 @@ auto HasExtension(const std::string &filename, const std::string &ext) -> bool
 }
 
 // Read a file of coordinates into a vector. First two fields of comma/tab/space delimited input are used.
-auto ReadFile(const std::string &filename, int fieldX, int fieldY) -> PointVector
+auto ReadFile(const std::string &filename, int fieldX, int fieldY, bool scaling, double scaleFactor) -> PointVector
 {
 	fieldX--; // from 1-based index to 0-based
 	fieldY--;
@@ -267,6 +297,11 @@ auto ReadFile(const std::string &filename, int fieldX, int fieldY) -> PointVecto
 			{
 			p.x = std::atof(tokens[fieldX].c_str());
 			p.y = std::atof(tokens[fieldY].c_str());
+			if (scaling)
+			{
+				p.x *= scaleFactor;
+				p.y *= scaleFactor;
+			}
 			list.push_back(p);
 			}
 		}
