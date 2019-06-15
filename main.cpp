@@ -66,8 +66,8 @@ auto ParseArgument(int argc, char **argv, const std::string &name, int &val) -> 
 auto ParseArgument(int argc, char **argv, const std::string &name, double &val) -> int;
 auto HasExtension(const std::string &filename, const std::string &ext) -> bool;
 auto ReadFile(const std::string &filename, int fieldX = 1, int fieldY = 2, bool scaling = false, double scaleFactor = 1.0) -> PointVector;
-auto Print(const std::string &filename, const PointVector &points) -> void;
-auto Print(FILE *out, const PointVector &points, const char *format = "%.3f  %.3f\n") -> void;
+auto Print(const std::string &filename, const PointVector &points, int decimals) -> void;
+auto Print(FILE *out, const PointVector &points, int decimals, const char *format = "%.*f  %.*f\n") -> void;
 auto Split(const std::string &value, const char *delims) -> std::vector<std::string>;
 
 // Algorithm-specific
@@ -193,19 +193,26 @@ int main(int argc, char *argv[])
 		return EXIT_SUCCESS;
 		}
 
+	// Number of decimal places for output
+	int decimals = 0;
+	if (FindArgument(argc, argv, "-decimals") != -1)
+		ParseArgument(argc, argv, "-decimals", decimals);
+	if (decimals == 0)
+		decimals = 3;
+
 	// Output to file or stdout
 	if (FindArgument(argc, argv, "-out") != -1)
 		{
 		std::string output;
 		ParseArgument(argc, argv, "-out", output);
 
-		Print(output, hull);
+		Print(output, hull, decimals);
 		std::cout << output << " written.\n";
 		}
 	else
 		{
 		// Nothing specified, so output to console
-		Print(stdout, hull);
+		Print(stdout, hull, decimals);
 		}
 
 	return EXIT_SUCCESS;
@@ -215,7 +222,7 @@ int main(int argc, char *argv[])
 // Print program usage info.
 auto Usage() -> void
 {
-	std::cout << "Usage: concave.exe filename [-out arg] [-k arg] [-field_for_x arg] [-field_for_y arg] [-no_out] [-no_iterate]\n";
+	std::cout << "Usage: concave.exe filename [-out arg] [-k arg] [-field_for_x arg] [-field_for_y arg] [-no_out] [-no_iterate] [-scale_factor] [-decimals]\n";
 	std::cout << "\n";
 	std::cout << " filename      (required) : file of input coordinates, one row per point.\n";
 	std::cout << " -out          (optional) : output file for the hull polygon coordinates. Default=stdout.\n";
@@ -225,6 +232,7 @@ auto Usage() -> void
 	std::cout << " -no_out       (optional) : disable output of the hull polygon coordinates.\n";
 	std::cout << " -no_iterate   (optional) : stop after only one iteration of K, irrespective of result.\n";
 	std::cout << " -scale_factor (optional) : scale factor to apply to input coordinates. Default=1.0(none).\n";
+	std::cout << " -decimals     (optional) : number of decimal places for output. Default=3.\n";
 }
 
 // Get command line index of name
@@ -310,29 +318,29 @@ auto ReadFile(const std::string &filename, int fieldX, int fieldY, bool scaling,
 }
 
 // Output a point list to a file
-auto Print(const std::string &filename, const PointVector &points) -> void
+auto Print(const std::string &filename, const PointVector &points, int decimals) -> void
 {
 	std::string format;
 	if (HasExtension(filename, ".csv"))
-		format = "%.3f,%.3f\n";
+		format = "%.*f,%.*f\n";
 	else
-		format = "%.3f  %.3f\n";
+		format = "%.*f  %.*f\n";
 
 	FILE *out = fopen(filename.c_str(), "w+");
 	if (out)
 		{
-		Print(out, points, format.c_str());
+		Print(out, points, decimals, format.c_str());
 
 		fclose(out);
 		}
 }
 
 // Output a point list to a stream with a given format string
-auto Print(FILE *out, const PointVector &points, const char *format) -> void
+auto Print(FILE *out, const PointVector &points, int decimals, const char *format) -> void
 {
 	for (const auto &p : points)
 		{
-		fprintf(out, format, p.x, p.y);
+		fprintf(out, format, decimals, p.x, decimals, p.y);
 		}
 }
 
