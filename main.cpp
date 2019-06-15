@@ -114,6 +114,13 @@ int main(int argc, char *argv[])
 
 	std::string filename(argv[1]);
 
+	// file must exist
+	if (!std::fstream(filename))
+	{
+		std::cout << "Filename         : <does not exist>\n";
+		return EXIT_FAILURE;
+	}
+
 	// The input field numbers for x and y coordinates
 	int fieldX = 1;
 	int fieldY = 2;
