@@ -226,7 +226,7 @@ auto Usage() -> void
 	std::cout << "\n";
 	std::cout << " filename      (required) : file of input coordinates, one row per point.\n";
 	std::cout << " -out          (optional) : output file for the hull polygon coordinates. Default=stdout.\n";
-	std::cout << " -k            (optional) : start iteration K value. Default=3.\n";
+	std::cout << " -k            (optional) : start iteration K value. Default=4.\n";
 	std::cout << " -field_for_x  (optional) : 1-based column number of input for x-coordinate. Default=1.\n";
 	std::cout << " -field_for_y  (optional) : 1-based column number of input for y-coordinate. Default=2.\n";
 	std::cout << " -no_out       (optional) : disable output of the hull polygon coordinates.\n";
